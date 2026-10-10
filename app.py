@@ -516,4 +516,67 @@ elif menu == "💸 Rincian Pengeluaran":
     st.metric("TOTAL PENGELUARAN MUSIM INI", f"Rp {tot_pengeluaran:,.0f}".replace(',', '.'))
     st.markdown("---")
     
-    if "OKT 2
+    if "OKT 2026" in musim_aktif:
+        df_exp_cat = df_pengeluaran.groupby("KATEGORI")["JUMLAH"].sum().reset_index().sort_values(by="JUMLAH", ascending=False)
+        fig_exp = px.bar(df_exp_cat, x="KATEGORI", y="JUMLAH", text="JUMLAH", color="KATEGORI")
+        fig_exp.update_traces(texttemplate='Rp %{text:,.0f}', textposition='outside')
+        st.plotly_chart(fig_exp, use_container_width=True)
+        st.dataframe(df_pengeluaran, use_container_width=True)
+        st.download_button("📥 Unduh Rincian Pengeluaran (CSV)", df_pengeluaran.to_csv(index=False), "Rincian_Pengeluaran.csv", "text/csv")
+    else:
+        if not df_transaksi.empty:
+            df_peng_baru = df_transaksi[df_transaksi['jenis'] == 'Pengeluaran']
+            st.dataframe(df_peng_baru, use_container_width=True)
+        else:
+            st.info("💡 Belum ada pengeluaran yang dicatat untuk musim baru ini.")
+
+# -------------------- TAMBAH TRANSAKSI --------------------
+elif menu == "➕ Tambah Transaksi":
+    st.title("📝 Input Transaksi Kas Baru")
+    st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
+    
+    if not is_admin:
+        st.warning("🔒 Halaman ini khusus Pengurus. Silakan masukkan PIN Pengurus di panel samping kiri terlebih dahulu.")
+    else:
+        with st.form("form_transaksi"):
+            jenis = st.selectbox("Jenis Transaksi", ["Pemasukan", "Pengeluaran"])
+            kategori = st.selectbox("Unit / Kategori", ["Combine", "Rotavator", "Pestisida", "Oven", "Kredit Barang", "Belanja Modal", "Bahan Bakar"])
+            keterangan = st.text_input("Keterangan Transaksi")
+            jumlah_rp = st.number_input("Jumlah (Rupiah)", min_value=0, step=50000)
+            
+            submitted = st.form_submit_button("Simpan Transaksi")
+            if submitted and keterangan:
+                conn = get_db_connection()
+                c = conn.cursor()
+                c.execute("INSERT INTO transaksi (musim, tanggal, jenis, kategori, keterangan, jumlah) VALUES (?, date('now'), ?, ?, ?, ?)",
+                          (musim_aktif, jenis, kategori, keterangan, jumlah_rp))
+                conn.commit()
+                conn.close()
+                st.success(f"Berhasil menyimpan {jenis}: **{keterangan}** sebesar **Rp {jumlah_rp:,.0f}**!")
+                st.rerun()
+
+# -------------------- TUTUP BUKU & RESET MUSIM --------------------
+elif menu == "🔴 Tutup Buku & Reset Musim":
+    st.title("🔴 Fitur Tutup Buku & Reset untuk Musim Baru")
+    
+    if not is_admin:
+        st.warning("🔒 Halaman ini khusus Pengurus. Silakan masukkan PIN Pengurus di panel samping kiri terlebih dahulu.")
+    else:
+        st.error("⚠️ **Perhatian Pengurus:** Fitur ini akan menutup pembukuan musim aktif saat ini dan memindahkan Saldo Akhir Kas sebagai Saldo Awal Musim Baru.")
+        
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            st.metric("Musim Aktif Saat Ini", musim_aktif)
+            saldo_final_alihkan = st.number_input("Saldo Akhir Kas Yang Dialihkan (Rp):", value=float(saldo_akhir_kas), step=100000.0)
+            
+        with col_t2:
+            nama_musim_baru = st.text_input("Ketik Nama Musim Baru:", value="APRIL 2027 (Musim Gadu)")
+            konfirmasi_tutup = st.button("🚀 Konfirmasi Tutup Buku & Mulai Musim Baru")
+            
+            if konfirmasi_tutup and nama_musim_baru:
+                set_setting('saldo_awal', saldo_final_alihkan)
+                set_setting('musim_aktif', nama_musim_baru)
+                
+                st.balloons()
+                st.success(f"✅ Berhasil Tutup Buku! Musim baru **'{nama_musim_baru}'** telah aktif dengan Saldo Awal **Rp {saldo_final_alihkan:,.0f}**.")
+                st.rerun()
