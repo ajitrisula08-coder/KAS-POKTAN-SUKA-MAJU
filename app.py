@@ -1026,7 +1026,7 @@ else:
 # Logic Tampil Data Static (Khusus OKT 2026) vs Data Dinamis SQLite
 is_okt_2026 = "OKT 2026" in musim_laporan
 
-# Re-Hitung Pemasukan Input Baru Berdasarkan Kategori
+# Re-Hitung Pemasukan Input Baru Berdasarkan Kategori Spesifik
 if not df_transaksi.empty:
   df_pem_baru = df_transaksi[df_transaksi["jenis"] == "Pemasukan"]
   pem_trans_cb = df_pem_baru[df_pem_baru["kategori"] == "Combine"][
@@ -1039,15 +1039,23 @@ if not df_transaksi.empty:
       "jumlah"
   ].sum()
   pem_trans_ov = df_pem_baru[df_pem_baru["kategori"] == "Oven"]["jumlah"].sum()
+  pem_trans_kd = df_pem_baru[
+      df_pem_baru["kategori"].isin(["Kredit Barang", "Kredit Cicilan Barang"])
+  ]["jumlah"].sum()
   pem_trans_lain = df_pem_baru[
-      ~df_pem_baru["kategori"].isin(
-          ["Combine", "Rotavator", "Pestisida", "Oven"]
-      )
+      ~df_pem_baru["kategori"].isin([
+          "Combine",
+          "Rotavator",
+          "Pestisida",
+          "Oven",
+          "Kredit Barang",
+          "Kredit Cicilan Barang",
+      ])
   ]["jumlah"].sum()
 else:
   pem_trans_cb = pem_trans_rv = pem_trans_pst = pem_trans_ov = (
-      pem_trans_lain
-  ) = 0
+      pem_trans_kd
+  ) = pem_trans_lain = 0
 
 tot_combine = (
     df_combine["JUMLAH_RP"].sum() if is_okt_2026 else 0
@@ -1059,11 +1067,17 @@ tot_pestisida = (
     df_pestisida["jumlah_tagihan"].sum() if not df_pestisida.empty else 0
 ) + pem_trans_pst
 tot_oven = (df_oven["JUMLAH_RP"].sum() if is_okt_2026 else 0) + pem_trans_ov
+tot_kredit_masuk = pem_trans_kd
 
 pemasukan_kios = 9519000 if is_okt_2026 else 0
 pemasukan_tambahan = pem_trans_lain
 tot_pemasukan_usaha = (
-    tot_combine + tot_rotavator + tot_pestisida + tot_oven + pemasukan_tambahan
+    tot_combine
+    + tot_rotavator
+    + tot_pestisida
+    + tot_oven
+    + tot_kredit_masuk
+    + pemasukan_tambahan
 )
 
 pengeluaran_tambahan = (
@@ -1124,12 +1138,20 @@ if menu == "📊 Dasbor Utama":
   with col_chart1:
     st.subheader("📈 Pemasukan Per Unit Usaha")
     df_pemasukan = pd.DataFrame({
-        "Unit Usaha": ["Combine", "Rotavator", "Pestisida", "Oven", "Lainnya"],
+        "Unit Usaha": [
+            "Combine",
+            "Rotavator",
+            "Pestisida",
+            "Oven",
+            "Kredit Barang",
+            "Lainnya",
+        ],
         "Pendapatan": [
             tot_combine,
             tot_rotavator,
             tot_pestisida,
             tot_oven,
+            tot_kredit_masuk,
             pemasukan_tambahan,
         ],
     })
@@ -1169,7 +1191,8 @@ if menu == "📊 Dasbor Utama":
           "2. REKAP ROTAVATOR",
           "3. REKAP PESTISIDA",
           "4. REKAP OVEN",
-          "5. PEMASUKAN LAINNYA",
+          "5. REKAP KREDIT BARANG",
+          "6. PEMASUKAN LAINNYA",
           "TOTAL PEMASUKAN USAHA",
       ],
       "Nilai Total": [
@@ -1177,6 +1200,7 @@ if menu == "📊 Dasbor Utama":
           f"Rp {tot_rotavator:,.0f}".replace(",", "."),
           f"Rp {tot_pestisida:,.0f}".replace(",", "."),
           f"Rp {tot_oven:,.0f}".replace(",", "."),
+          f"Rp {tot_kredit_masuk:,.0f}".replace(",", "."),
           f"Rp {pemasukan_tambahan:,.0f}".replace(",", "."),
           f"Rp {tot_pemasukan_usaha:,.0f}".replace(",", "."),
       ],
@@ -1413,8 +1437,18 @@ elif menu == "💳 Kredit & Cicilan Barang":
               f" {nominal_angsuran:,.0f}**!"
           )
           st.rerun()
-  else:
-    st.info(f"💡 Belum ada data kredit barang untuk musim **{musim_laporan}**.")
+
+  df_kd_baru = df_transaksi[
+      (
+          df_transaksi["kategori"].isin(
+              ["Kredit Barang", "Kredit Cicilan Barang"]
+          )
+      )
+      & (df_transaksi["jenis"] == "Pemasukan")
+  ]
+  if not df_kd_baru.empty:
+    st.subheader("➕ Data Transaksi Pemasukan Tambahan Cicilan Barang")
+    st.dataframe(df_kd_baru, use_container_width=True)
 
 # -------------------- PENGELUARAN --------------------
 elif menu == "💸 Rincian Pengeluaran":
