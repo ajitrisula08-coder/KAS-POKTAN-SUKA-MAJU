@@ -96,7 +96,13 @@ def init_db():
     )
     """)
 
-  # Default Settings
+  # Bersihkan data musim Oktober 2026 jika masih ada di database
+  c.execute("DELETE FROM pestisida WHERE musim LIKE '%OKT 2026%'")
+  c.execute("DELETE FROM kredit WHERE musim LIKE '%OKT 2026%'")
+  c.execute("DELETE FROM transaksi WHERE musim LIKE '%OKT 2026%'")
+  c.execute("DELETE FROM settings WHERE key LIKE '%OKT 2026%'")
+
+  # Set Default Musim Sekarang
   c.execute(
       "INSERT OR IGNORE INTO settings (key, value) VALUES ('musim_aktif',"
       " 'APRIL 2027 (Musim Gadu)')"
@@ -154,13 +160,13 @@ def get_all_musim():
   for table in ["pestisida", "kredit", "transaksi"]:
     c.execute(f"SELECT DISTINCT musim FROM {table}")
     for row in c.fetchall():
-      if row[0]:
+      if row[0] and "OKT 2026" not in row[0]:
         musim_set.add(row[0])
 
   c.execute("SELECT key FROM settings WHERE key LIKE 'saldo_awal_%'")
   for row in c.fetchall():
     key_name = row[0].replace("saldo_awal_", "")
-    if key_name:
+    if key_name and "OKT 2026" not in key_name:
       musim_set.add(key_name)
 
   conn.close()
@@ -277,7 +283,7 @@ else:
       "SISA_PIUTANG",
   ])
 
-# HITUNG TOTAL PEMASUKAN & PENGELUARAN DARI TRANSAKSI DATABASE PER MUSIM
+# HITUNG TOTAL PEMASUKAN & PENGELUARAN PER MUSIM
 if not df_transaksi.empty:
   df_pem_baru = df_transaksi[df_transaksi["jenis"] == "Pemasukan"]
   tot_combine = df_pem_baru[df_pem_baru["kategori"] == "Combine"][
@@ -763,9 +769,7 @@ elif menu == "🔴 Tutup Buku & Reset Musim":
       )
 
     with col_t2:
-      nama_musim_baru = st.text_input(
-          "Ketik Nama Musim Baru:", value="OKT 2027 (Musim Rendeng)"
-      )
+      nama_musim_baru = st.text_input("Ketik Nama Musim Baru:")
       konfirmasi_tutup = st.button(
           "🚀 Konfirmasi Tutup Buku & Mulai Musim Baru"
       )
