@@ -20,7 +20,7 @@ def init_db():
     conn = get_db_connection()
     c = conn.cursor()
     
-    # Table SETTINGS (Untuk Menyimpan Saldo Awal & Musim Aktif)
+    # Table SETTINGS
     c.execute('''
     CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -237,8 +237,8 @@ musim_aktif = get_setting('musim_aktif', 'OKT 2026 (Musim Rendeng)')
 saldo_musim_lalu = float(get_setting('saldo_awal', '206744480'))
 
 conn = get_db_connection()
-df_pestisida = pd.read_sql_query("SELECT * FROM pestisida WHERE musim = ?", conn, params=(musim_aktif,))
-df_kredit = pd.read_sql_query("SELECT * FROM kredit WHERE musim = ?", conn, params=(musim_aktif,))
+df_pestisida = pd.read_sql_query("SELECT * FROM pestisida", conn)
+df_kredit = pd.read_sql_query("SELECT * FROM kredit", conn)
 df_transaksi = pd.read_sql_query("SELECT * FROM transaksi WHERE musim = ?", conn, params=(musim_aktif,))
 conn.close()
 
@@ -248,7 +248,7 @@ if not df_kredit.empty:
 else:
     df_kredit = pd.DataFrame(columns=["id", "musim", "no", "nama_anggota", "nama_barang", "harga_total", "dp", "angsuran_masuk", "status", "TOTAL_TERBAYAR", "SISA_PIUTANG"])
 
-# Calculations
+# Total Perhitungan Pemasukan & Pengeluaran
 tot_combine = df_combine["JUMLAH_RP"].sum() if "OKT 2026" in musim_aktif else 0
 tot_rotavator = df_rotavator["SISA_NETTO"].sum() if "OKT 2026" in musim_aktif else 0
 tot_pestisida = df_pestisida["jumlah_tagihan"].sum() if not df_pestisida.empty else 0
@@ -263,6 +263,12 @@ tot_pengeluaran = (df_pengeluaran["JUMLAH"].sum() if "OKT 2026" in musim_aktif e
 
 sisa_saldo_kios = (saldo_musim_lalu + pemasukan_kios) - tot_pengeluaran
 saldo_akhir_kas = tot_pemasukan_usaha + sisa_saldo_kios
+
+# Nilai Saldo Akhir yang ditargetkan untuk pengalihan musim OKT 2026
+if "OKT 2026" in musim_aktif:
+    saldo_dialihkan_default = 233235079.0
+else:
+    saldo_dialihkan_default = float(saldo_akhir_kas)
 
 tot_nilai_kredit = df_kredit["harga_total"].sum() if not df_kredit.empty else 0
 tot_kredit_terbayar = df_kredit["TOTAL_TERBAYAR"].sum() if not df_kredit.empty else 0
@@ -436,7 +442,7 @@ elif menu == "🧪 Unit Pestisida & Kios":
                 if submit_p:
                     conn = get_db_connection()
                     c = conn.cursor()
-                    c.execute("UPDATE pestisida SET status = ? WHERE nama = ? AND musim = ?", (status_baru_p, pilih_anggota_p, musim_aktif))
+                    c.execute("UPDATE pestisida SET status = ? WHERE nama = ?", (status_baru_p, pilih_anggota_p))
                     conn.commit()
                     conn.close()
                     st.success(f"Status tagihan **{pilih_anggota_p}** diperbarui menjadi **{status_baru_p}**!")
@@ -486,88 +492,4 @@ elif menu == "💳 Kredit & Cicilan Barang":
                 if simpan_angsuran and pilih_pembayar != "Tidak Ada Kredit Berjalan":
                     conn = get_db_connection()
                     c = conn.cursor()
-                    c.execute("UPDATE kredit SET angsuran_masuk = angsuran_masuk + ? WHERE nama_anggota = ? AND musim = ?", (nominal_angsuran, pilih_pembayar, musim_aktif))
-                    
-                    c.execute("SELECT harga_total, (dp + angsuran_masuk) as total FROM kredit WHERE nama_anggota = ? AND musim = ?", (pilih_pembayar, musim_aktif))
-                    row = c.fetchone()
-                    if row and row['total'] >= row['harga_total']:
-                        c.execute("UPDATE kredit SET status = 'Lunas' WHERE nama_anggota = ? AND musim = ?", (pilih_pembayar, musim_aktif))
-                        
-                    conn.commit()
-                    conn.close()
-                    st.success(f"Berhasil mencatat angsuran **{pilih_pembayar}** sebesar **Rp {nominal_angsuran:,.0f}**!")
-                    st.rerun()
-    else:
-        st.info("💡 Belum ada data kredit barang untuk musim baru ini.")
-
-# -------------------- PENGELUARAN --------------------
-elif menu == "💸 Rincian Pengeluaran":
-    st.title("💸 Laporan Pengeluaran & Belanja Modal")
-    st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
-    st.metric("TOTAL PENGELUARAN MUSIM INI", f"Rp {tot_pengeluaran:,.0f}".replace(',', '.'))
-    st.markdown("---")
-    
-    if "OKT 2026" in musim_aktif:
-        df_exp_cat = df_pengeluaran.groupby("KATEGORI")["JUMLAH"].sum().reset_index().sort_values(by="JUMLAH", ascending=False)
-        fig_exp = px.bar(df_exp_cat, x="KATEGORI", y="JUMLAH", text="JUMLAH", color="KATEGORI")
-        fig_exp.update_traces(texttemplate='Rp %{text:,.0f}', textposition='outside')
-        st.plotly_chart(fig_exp, use_container_width=True)
-        st.dataframe(df_pengeluaran, use_container_width=True)
-        st.download_button("📥 Unduh Rincian Pengeluaran (CSV)", df_pengeluaran.to_csv(index=False), "Rincian_Pengeluaran.csv", "text/csv")
-    else:
-        if not df_transaksi.empty:
-            df_peng_baru = df_transaksi[df_transaksi['jenis'] == 'Pengeluaran']
-            st.dataframe(df_peng_baru, use_container_width=True)
-        else:
-            st.info("💡 Belum ada pengeluaran yang dicatat untuk musim baru ini.")
-
-# -------------------- TAMBAH TRANSAKSI --------------------
-elif menu == "➕ Tambah Transaksi":
-    st.title("📝 Input Transaksi Kas Baru")
-    st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
-    
-    if not is_admin:
-        st.warning("🔒 Halaman ini khusus Pengurus. Silakan masukkan PIN Pengurus di panel samping kiri terlebih dahulu.")
-    else:
-        with st.form("form_transaksi"):
-            jenis = st.selectbox("Jenis Transaksi", ["Pemasukan", "Pengeluaran"])
-            kategori = st.selectbox("Unit / Kategori", ["Combine", "Rotavator", "Pestisida", "Oven", "Kredit Barang", "Belanja Modal", "Bahan Bakar"])
-            keterangan = st.text_input("Keterangan Transaksi")
-            jumlah_rp = st.number_input("Jumlah (Rupiah)", min_value=0, step=50000)
-            
-            submitted = st.form_submit_button("Simpan Transaksi")
-            if submitted and keterangan:
-                conn = get_db_connection()
-                c = conn.cursor()
-                c.execute("INSERT INTO transaksi (musim, tanggal, jenis, kategori, keterangan, jumlah) VALUES (?, date('now'), ?, ?, ?, ?)",
-                          (musim_aktif, jenis, kategori, keterangan, jumlah_rp))
-                conn.commit()
-                conn.close()
-                st.success(f"Berhasil menyimpan {jenis}: **{keterangan}** sebesar **Rp {jumlah_rp:,.0f}**!")
-                st.rerun()
-
-# -------------------- TUTUP BUKU & RESET MUSIM --------------------
-elif menu == "🔴 Tutup Buku & Reset Musim":
-    st.title("🔴 Fitur Tutup Buku & Reset untuk Musim Baru")
-    
-    if not is_admin:
-        st.warning("🔒 Halaman ini khusus Pengurus. Silakan masukkan PIN Pengurus di panel samping kiri terlebih dahulu.")
-    else:
-        st.error("⚠️ **Perhatian Pengurus:** Fitur ini akan menutup pembukuan musim aktif saat ini dan memindahkan Saldo Akhir Kas sebagai Saldo Awal Musim Baru.")
-        
-        col_t1, col_t2 = st.columns(2)
-        with col_t1:
-            st.metric("Musim Aktif Saat Ini", musim_aktif)
-            st.metric("Saldo Akhir Kas Yang Dialihkan", f"Rp {saldo_akhir_kas:,.0f}".replace(',', '.'))
-            
-        with col_t2:
-            nama_musim_baru = st.text_input("Ketik Nama Musim Baru:", value="APRIL 2027 (Musim Gadu)")
-            konfirmasi_tutup = st.button("🚀 Konfirmasi Tutup Buku & Mulai Musim Baru")
-            
-            if konfirmasi_tutup and nama_musim_baru:
-                set_setting('saldo_awal', saldo_akhir_kas)
-                set_setting('musim_aktif', nama_musim_baru)
-                
-                st.balloons()
-                st.success(f"✅ Berhasil Tutup Buku! Musim baru **'{nama_musim_baru}'** telah aktif dengan Saldo Awal **Rp {saldo_akhir_kas:,.0f}**.")
-                st.rerun()
+                    c.execute("UPDATE kredit SET angsuran_masuk = angsuran_
