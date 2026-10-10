@@ -20,6 +20,14 @@ def init_db():
     conn = get_db_connection()
     c = conn.cursor()
     
+    # Table SETTINGS (Untuk Menyimpan Saldo Awal & Musim Aktif)
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+    ''')
+    
     # Table PESTISIDA
     c.execute('''
     CREATE TABLE IF NOT EXISTS pestisida (
@@ -60,23 +68,27 @@ def init_db():
     )
     ''')
     
+    # Default Settings
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('musim_aktif', 'OKT 2026 (Musim Rendeng)')")
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('saldo_awal', '206744480')")
+    
     # Populate Default Pestisida Data if Empty
     c.execute("SELECT COUNT(*) FROM pestisida")
     if c.fetchone()[0] == 0:
         default_pestisida = [
-            ("OKT 2026", 1, "AZIZ", 6675000, "Belum Lunas"),
-            ("OKT 2026", 2, "DANANG", 9087649, "Belum Lunas"),
-            ("OKT 2026", 3, "RONI", 18051950, "Belum Lunas"),
-            ("OKT 2026", 4, "JAKA", 15648000, "Belum Lunas"),
-            ("OKT 2026", 5, "CAHYO", 13470000, "Belum Lunas"),
-            ("OKT 2026", 6, "HARTOYO", 18810000, "Belum Lunas"),
-            ("OKT 2026", 7, "WARDI", 16736000, "Belum Lunas"),
-            ("OKT 2026", 8, "TB", 3300000, "Belum Lunas"),
-            ("OKT 2026", 9, "GIMAN", 10506000, "Belum Lunas"),
-            ("OKT 2026", 10, "AJI", 5960000, "Belum Lunas"),
-            ("OKT 2026", 11, "ANTO", 3022500, "Belum Lunas"),
-            ("OKT 2026", 12, "IHSAN", 775000, "Belum Lunas"),
-            ("OKT 2026", 13, "SUTAR", 1085000, "Belum Lunas")
+            ("OKT 2026 (Musim Rendeng)", 1, "AZIZ", 6675000, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 2, "DANANG", 9087649, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 3, "RONI", 18051950, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 4, "JAKA", 15648000, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 5, "CAHYO", 13470000, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 6, "HARTOYO", 18810000, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 7, "WARDI", 16736000, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 8, "TB", 3300000, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 9, "GIMAN", 10506000, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 10, "AJI", 5960000, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 11, "ANTO", 3022500, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 12, "IHSAN", 775000, "Belum Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 13, "SUTAR", 1085000, "Belum Lunas")
         ]
         c.executemany("INSERT INTO pestisida (musim, no, nama, jumlah_tagihan, status) VALUES (?,?,?,?,?)", default_pestisida)
         
@@ -84,11 +96,11 @@ def init_db():
     c.execute("SELECT COUNT(*) FROM kredit")
     if c.fetchone()[0] == 0:
         default_kredit = [
-            ("OKT 2026", 1, "PAK JOKO", "Motor Honda", 28360000, 5000000, 12000000, "Berjalan"),
-            ("OKT 2026", 2, "PAK RONI", "Motor Yamaha", 23840000, 4000000, 10000000, "Berjalan"),
-            ("OKT 2026", 3, "PAK GIMAN", "Motor Honda", 26520000, 5000000, 21520000, "Lunas"),
-            ("OKT 2026", 4, "PAK TONO", "Motor Honda", 26520000, 5000000, 15000000, "Berjalan"),
-            ("OKT 2026", 5, "WARDI", "Sprayer Elektrik", 1500000, 300000, 1200000, "Lunas")
+            ("OKT 2026 (Musim Rendeng)", 1, "PAK JOKO", "Motor Honda", 28360000, 5000000, 12000000, "Berjalan"),
+            ("OKT 2026 (Musim Rendeng)", 2, "PAK RONI", "Motor Yamaha", 23840000, 4000000, 10000000, "Berjalan"),
+            ("OKT 2026 (Musim Rendeng)", 3, "PAK GIMAN", "Motor Honda", 26520000, 5000000, 21520000, "Lunas"),
+            ("OKT 2026 (Musim Rendeng)", 4, "PAK TONO", "Motor Honda", 26520000, 5000000, 15000000, "Berjalan"),
+            ("OKT 2026 (Musim Rendeng)", 5, "WARDI", "Sprayer Elektrik", 1500000, 300000, 1200000, "Lunas")
         ]
         c.executemany("INSERT INTO kredit (musim, no, nama_anggota, nama_barang, harga_total, dp, angsuran_masuk, status) VALUES (?,?,?,?,?,?,?,?)", default_kredit)
         
@@ -97,7 +109,23 @@ def init_db():
 
 init_db()
 
-# -------------------- DEFAULT CONSTANT DATA --------------------
+# Helper DB Functions
+def get_setting(key, default_val=""):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT value FROM settings WHERE key = ?", (key,))
+    row = c.fetchone()
+    conn.close()
+    return row['value'] if row else default_val
+
+def set_setting(key, value):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+    conn.commit()
+    conn.close()
+
+# -------------------- DEFAULT STATIC DATA --------------------
 @st.cache_data
 def get_static_data():
     combine_data = [
@@ -156,7 +184,7 @@ def get_static_data():
         {"NO": 2, "RINCIAN": "BELANJA KIOS", "JUMLAH": 2845000, "KATEGORI": "Pupuk & Obat"},
         {"NO": 3, "RINCIAN": "BELANJA OBAT2 (MS RONI PEMADAM)", "JUMLAH": 1458000, "KATEGORI": "Pupuk & Obat"},
         {"NO": 4, "RINCIAN": "BLNJA OBT P JOKO", "JUMLAH": 270000, "KATEGORI": "Pupuk & Obat"},
-        {"NO": 12, "RINCIAN": "BELANJA KIOS", "JUMLAH": 11793000, "KATEGORI": "Pupuk & Obat"},
+        {"NO": 12, "RINCIAN": "BELANJA KIOS", "JUMLAH": 2835000, "KATEGORI": "Pupuk & Obat"},
         {"NO": 5, "RINCIAN": "wadah kios", "JUMLAH": 50000, "KATEGORI": "Operasional Kios"},
         {"NO": 6, "RINCIAN": "KONSUMSI SYUKURAN", "JUMLAH": 675000, "KATEGORI": "Konsumsi & Dinas"},
         {"NO": 7, "RINCIAN": "SOLAR MS RONI 1", "JUMLAH": 800000, "KATEGORI": "Bahan Bakar"},
@@ -204,15 +232,41 @@ def get_static_data():
 
 df_combine, df_rotavator, df_pengeluaran, df_oven = get_static_data()
 
-# Load DB Tables
+# -------------------- LOAD SETTINGS & DB --------------------
+musim_aktif = get_setting('musim_aktif', 'OKT 2026 (Musim Rendeng)')
+saldo_musim_lalu = float(get_setting('saldo_awal', '206744480'))
+
 conn = get_db_connection()
-df_pestisida = pd.read_sql_query("SELECT * FROM pestisida", conn)
-df_kredit = pd.read_sql_query("SELECT * FROM kredit", conn)
-df_transaksi = pd.read_sql_query("SELECT * FROM transaksi", conn)
+df_pestisida = pd.read_sql_query("SELECT * FROM pestisida WHERE musim = ?", conn, params=(musim_aktif,))
+df_kredit = pd.read_sql_query("SELECT * FROM kredit WHERE musim = ?", conn, params=(musim_aktif,))
+df_transaksi = pd.read_sql_query("SELECT * FROM transaksi WHERE musim = ?", conn, params=(musim_aktif,))
 conn.close()
 
-df_kredit["TOTAL_TERBAYAR"] = df_kredit["dp"] + df_kredit["angsuran_masuk"]
-df_kredit["SISA_PIUTANG"] = df_kredit["harga_total"] - df_kredit["TOTAL_TERBAYAR"]
+if not df_kredit.empty:
+    df_kredit["TOTAL_TERBAYAR"] = df_kredit["dp"] + df_kredit["angsuran_masuk"]
+    df_kredit["SISA_PIUTANG"] = df_kredit["harga_total"] - df_kredit["TOTAL_TERBAYAR"]
+else:
+    df_kredit = pd.DataFrame(columns=["id", "musim", "no", "nama_anggota", "nama_barang", "harga_total", "dp", "angsuran_masuk", "status", "TOTAL_TERBAYAR", "SISA_PIUTANG"])
+
+# Calculations
+tot_combine = df_combine["JUMLAH_RP"].sum() if "OKT 2026" in musim_aktif else 0
+tot_rotavator = df_rotavator["SISA_NETTO"].sum() if "OKT 2026" in musim_aktif else 0
+tot_pestisida = df_pestisida["jumlah_tagihan"].sum() if not df_pestisida.empty else 0
+tot_oven = df_oven["JUMLAH_RP"].sum() if "OKT 2026" in musim_aktif else 0
+
+pemasukan_kios = 9519000 if "OKT 2026" in musim_aktif else 0
+pemasukan_tambahan = df_transaksi[df_transaksi["jenis"] == "Pemasukan"]["jumlah"].sum() if not df_transaksi.empty else 0
+tot_pemasukan_usaha = tot_combine + tot_rotavator + tot_pestisida + tot_oven + pemasukan_tambahan
+
+pengeluaran_tambahan = df_transaksi[df_transaksi["jenis"] == "Pengeluaran"]["jumlah"].sum() if not df_transaksi.empty else 0
+tot_pengeluaran = (df_pengeluaran["JUMLAH"].sum() if "OKT 2026" in musim_aktif else 0) + pengeluaran_tambahan
+
+sisa_saldo_kios = (saldo_musim_lalu + pemasukan_kios) - tot_pengeluaran
+saldo_akhir_kas = tot_pemasukan_usaha + sisa_saldo_kios
+
+tot_nilai_kredit = df_kredit["harga_total"].sum() if not df_kredit.empty else 0
+tot_kredit_terbayar = df_kredit["TOTAL_TERBAYAR"].sum() if not df_kredit.empty else 0
+tot_sisa_piutang = df_kredit["SISA_PIUTANG"].sum() if not df_kredit.empty else 0
 
 # -------------------- SIDEBAR SETTINGS & LOGIN --------------------
 st.sidebar.title("🌾 Kelompok Tani")
@@ -232,43 +286,20 @@ if mode_akses == "🔐 Mode Pengurus (Akses Edit)":
     elif pin_input != "":
         st.sidebar.error("PIN Salah!")
 
-# Pilih Musim Tanam
+# Tampil Musim Aktif
 st.sidebar.markdown("---")
-st.sidebar.subheader("🗓️ Musim Tanam")
-musim_pilihan = st.sidebar.selectbox("Pilih Musim:", ["OKT 2026 (Musim Rendeng)", "APRIL 2026 (Musim Gadu)"])
+st.sidebar.subheader("🗓️ Musim Aktif Tanam")
+st.sidebar.info(f"📍 **{musim_aktif}**")
 
-# Input Saldo Awal Musim
-st.sidebar.markdown("---")
-st.sidebar.subheader("⚙️ Saldo Musim Lalu")
-saldo_musim_lalu = st.sidebar.number_input(
-    "Input Saldo Awal Musim (Rp):",
-    value=206744480,
-    step=1000000,
-    disabled=not is_admin
-)
-
-# Calculations
-tot_combine = df_combine["JUMLAH_RP"].sum()
-tot_rotavator = df_rotavator["SISA_NETTO"].sum()
-tot_pestisida = df_pestisida["jumlah_tagihan"].sum()
-tot_oven = df_oven["JUMLAH_RP"].sum()
-
-pemasukan_kios = 0
-tot_pemasukan_usaha = tot_combine + tot_rotavator + tot_pestisida + tot_oven
-
-# Tambahan transaksi masuk/keluar dari DB
-pemasukan_tambahan = df_transaksi[df_transaksi["jenis"] == "Pemasukan"]["jumlah"].sum() if not df_transaksi.empty else 0
-pengeluaran_tambahan = df_transaksi[df_transaksi["jenis"] == "Pengeluaran"]["jumlah"].sum() if not df_transaksi.empty else 0
-
-tot_pengeluaran = df_pengeluaran["JUMLAH"].sum() + pengeluaran_tambahan
-tot_pemasukan_usaha += pemasukan_tambahan
-
-sisa_saldo_kios = (saldo_musim_lalu + pemasukan_kios) - tot_pengeluaran
-saldo_akhir_kas = tot_pemasukan_usaha + sisa_saldo_kios
-
-tot_nilai_kredit = df_kredit["harga_total"].sum()
-tot_kredit_terbayar = df_kredit["TOTAL_TERBAYAR"].sum()
-tot_sisa_piutang = df_kredit["SISA_PIUTANG"].sum()
+# Input Saldo Awal Musim Manual
+if is_admin:
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("⚙️ Ubah Saldo Awal")
+    new_saldo_awal = st.sidebar.number_input("Saldo Awal Musim (Rp):", value=float(saldo_musim_lalu), step=1000000.0)
+    if new_saldo_awal != saldo_musim_lalu:
+        set_setting('saldo_awal', new_saldo_awal)
+        st.sidebar.success("Saldo awal disimpan!")
+        st.rerun()
 
 # Menu Radio Navigasi
 st.sidebar.markdown("---")
@@ -281,14 +312,15 @@ menu = st.sidebar.radio(
         "🧪 Unit Pestisida & Kios", 
         "💳 Kredit & Cicilan Barang", 
         "💸 Rincian Pengeluaran", 
-        "➕ Tambah Transaksi"
+        "➕ Tambah Transaksi",
+        "🔴 Tutup Buku & Reset Musim"
     ]
 )
 
 # -------------------- DASHBOARD UTAMA --------------------
 if menu == "📊 Dasbor Utama":
     st.title("🌾 Dasbor Utama Kas Kelompok Tani")
-    st.caption(f"Status Pengguna: **{mode_akses}** | Musim Tanam: **{musim_pilihan}**")
+    st.caption(f"Status Pengguna: **{mode_akses}** | Musim Tanam Aktif: **{musim_aktif}**")
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Hasil Usaha", f"Rp {tot_pemasukan_usaha:,.0f}".replace(',', '.'))
@@ -298,15 +330,15 @@ if menu == "📊 Dasbor Utama":
 
     st.markdown("---")
     
-    st.info(f"💡 **Informasi Ringkasan Kas:** Saldo Awal Musim = **Rp {saldo_musim_lalu:,.0f}** | Piutang Kredit Anggota = **Rp {tot_sisa_piutang:,.0f}**.")
+    st.info(f"💡 **Informasi Ringkasan Kas:** Saldo Awal Musim Ini = **Rp {saldo_musim_lalu:,.0f}** | Sisa Piutang Kredit = **Rp {tot_sisa_piutang:,.0f}**.")
     
     col_chart1, col_chart2 = st.columns(2)
     
     with col_chart1:
         st.subheader("📈 Pemasukan Per Unit Usaha")
         df_pemasukan = pd.DataFrame({
-            "Unit Usaha": ["Combine", "Rotavator", "Pestisida", "Oven"],
-            "Pendapatan": [tot_combine, tot_rotavator, tot_pestisida, tot_oven]
+            "Unit Usaha": ["Combine", "Rotavator", "Pestisida", "Oven", "Lainnya"],
+            "Pendapatan": [tot_combine, tot_rotavator, tot_pestisida, tot_oven, pemasukan_tambahan]
         })
         fig_pie = px.pie(df_pemasukan, values="Pendapatan", names="Unit Usaha", hole=0.4)
         st.plotly_chart(fig_pie, use_container_width=True)
@@ -321,48 +353,54 @@ if menu == "📊 Dasbor Utama":
         fig_bar.update_traces(texttemplate='Rp %{text:,.0f}', textposition='outside')
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    st.markdown("### 📝 Tabel Rekap Pemasukan")
+    st.markdown("### 📝 Tabel Rekap Pemasukan Musim Ini")
     df_rekap_show = pd.DataFrame({
-        "Sumber Pemasukan": ["1. REKAP COMBINE", "2. REKAP ROTAVATOR", "3. REKAP PESTISIDA", "4. REKAP OVEN", "TOTAL PEMASUKAN USAHA"],
-        "Nilai Total": [f"Rp {tot_combine:,.0f}".replace(',', '.'), f"Rp {tot_rotavator:,.0f}".replace(',', '.'), f"Rp {tot_pestisida:,.0f}".replace(',', '.'), f"Rp {tot_oven:,.0f}".replace(',', '.'), f"Rp {tot_pemasukan_usaha:,.0f}".replace(',', '.')]
+        "Sumber Pemasukan": ["1. REKAP COMBINE", "2. REKAP ROTAVATOR", "3. REKAP PESTISIDA", "4. REKAP OVEN", "5. PEMASUKAN LAINNYA", "TOTAL PEMASUKAN USAHA"],
+        "Nilai Total": [f"Rp {tot_combine:,.0f}".replace(',', '.'), f"Rp {tot_rotavator:,.0f}".replace(',', '.'), f"Rp {tot_pestisida:,.0f}".replace(',', '.'), f"Rp {tot_oven:,.0f}".replace(',', '.'), f"Rp {pemasukan_tambahan:,.0f}".replace(',', '.'), f"Rp {tot_pemasukan_usaha:,.0f}".replace(',', '.')]
     })
     st.dataframe(df_rekap_show, use_container_width=True)
-    
     st.download_button("📥 Unduh Ringkasan Kas (CSV)", df_rekap_show.to_csv(index=False), "Ringkasan_Kas_Tani.csv", "text/csv")
 
 # -------------------- UNIT COMBINE --------------------
 elif menu == "🚜 Unit Combine (Panen)":
     st.title("🚜 Laporan Hasil Panen - Combine Harvester")
+    st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
     
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Karung Gabah", f"{df_combine['JML_KARUNG'].sum():,} Karung".replace(',', '.'))
-    c2.metric("Total Pendapatan Combine", f"Rp {tot_combine:,.0f}".replace(',', '.'))
-    c3.metric("Jumlah Petani", f"{len(df_combine)} Orang")
-    
-    st.markdown("---")
-    search_nama = st.text_input("🔍 Cari Nama Petani:")
-    df_filtered = df_combine if not search_nama else df_combine[df_combine['NAMA'].str.contains(search_nama, case=False, na=False)]
-    st.dataframe(df_filtered, use_container_width=True)
-    
-    st.download_button("📥 Unduh Data Combine (CSV)", df_combine.to_csv(index=False), "Laporan_Combine.csv", "text/csv")
+    if "OKT 2026" in musim_aktif:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total Karung Gabah", f"{df_combine['JML_KARUNG'].sum():,} Karung".replace(',', '.'))
+        c2.metric("Total Pendapatan Combine", f"Rp {tot_combine:,.0f}".replace(',', '.'))
+        c3.metric("Jumlah Petani", f"{len(df_combine)} Orang")
+        
+        st.markdown("---")
+        search_nama = st.text_input("🔍 Cari Nama Petani:")
+        df_filtered = df_combine if not search_nama else df_combine[df_combine['NAMA'].str.contains(search_nama, case=False, na=False)]
+        st.dataframe(df_filtered, use_container_width=True)
+        st.download_button("📥 Unduh Data Combine (CSV)", df_combine.to_csv(index=False), "Laporan_Combine.csv", "text/csv")
+    else:
+        st.info("💡 Belum ada data transaksi Combine bawaan untuk musim baru ini. Gunakan menu 'Tambah Transaksi' untuk mencatat pemasukan baru.")
 
 # -------------------- UNIT ROTAVATOR --------------------
 elif menu == "⚙️ Unit Rotavator (Lahan)":
     st.title("⚙️ Laporan Pengolahan Lahan - Rotavator")
+    st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
     
-    r1, r2, r3 = st.columns(3)
-    r1.metric("Total Luas Tergarap", f"{df_rotavator['LUAS_HA'].sum():.2f} Ha")
-    r2.metric("Total Subsidi Solar", f"Rp {df_rotavator['SUBSIDI_SOLAR'].sum():,.0f}".replace(',', '.'))
-    r3.metric("Pendapatan Bersih", f"Rp {tot_rotavator:,.0f}".replace(',', '.'))
-    
-    st.markdown("---")
-    st.dataframe(df_rotavator, use_container_width=True)
-    
-    st.download_button("📥 Unduh Data Rotavator (CSV)", df_rotavator.to_csv(index=False), "Laporan_Rotavator.csv", "text/csv")
+    if "OKT 2026" in musim_aktif:
+        r1, r2, r3 = st.columns(3)
+        r1.metric("Total Luas Tergarap", f"{df_rotavator['LUAS_HA'].sum():.2f} Ha")
+        r2.metric("Total Subsidi Solar", f"Rp {df_rotavator['SUBSIDI_SOLAR'].sum():,.0f}".replace(',', '.'))
+        r3.metric("Pendapatan Bersih", f"Rp {tot_rotavator:,.0f}".replace(',', '.'))
+        
+        st.markdown("---")
+        st.dataframe(df_rotavator, use_container_width=True)
+        st.download_button("📥 Unduh Data Rotavator (CSV)", df_rotavator.to_csv(index=False), "Laporan_Rotavator.csv", "text/csv")
+    else:
+        st.info("💡 Belum ada data transaksi Rotavator untuk musim baru ini.")
 
 # -------------------- UNIT PESTISIDA & KIOS --------------------
 elif menu == "🧪 Unit Pestisida & Kios":
     st.title("🧪 Laporan Belanja Obat & Pestisida Anggota")
+    st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
     
     p1, p2, p3 = st.columns(3)
     p1.metric("Total Tagihan Pestisida", f"Rp {tot_pestisida:,.0f}".replace(',', '.'))
@@ -371,44 +409,45 @@ elif menu == "🧪 Unit Pestisida & Kios":
     
     st.markdown("---")
     
-    # Filter Nama & Status
-    col_p_s1, col_p_s2 = st.columns([2, 1])
-    with col_p_s1:
-        cari_pestisida = st.text_input("🔍 Cari Nama Anggota:")
-    with col_p_s2:
-        filter_pestisida_status = st.selectbox("Status Tagihan:", ["Semua Status", "Belum Lunas", "Lunas"])
-        
-    df_p_show = df_pestisida.copy()
-    if cari_pestisida:
-        df_p_show = df_p_show[df_p_show['nama'].str.contains(cari_pestisida, case=False, na=False)]
-    if filter_pestisida_status != "Semua Status":
-        df_p_show = df_p_show[df_p_show['status'] == filter_pestisida_status]
-        
-    st.dataframe(df_p_show, use_container_width=True)
-    
-    st.download_button("📥 Unduh Tagihan Pestisida (CSV)", df_pestisida.to_csv(index=False), "Tagihan_Pestisida.csv", "text/csv")
-    
-    # Mode Admin: Ubah Status Pelunasan
-    if is_admin:
-        st.markdown("---")
-        st.subheader("⚙️ Update Status Pelunasan Pestisida (Pengurus Only)")
-        with st.form("form_update_pestisida"):
-            pilih_anggota_p = st.selectbox("Pilih Anggota:", df_pestisida['nama'].tolist())
-            status_baru_p = st.selectbox("Status Baru:", ["Belum Lunas", "Lunas"])
-            submit_p = st.form_submit_button("Update Status")
+    if not df_pestisida.empty:
+        col_p_s1, col_p_s2 = st.columns([2, 1])
+        with col_p_s1:
+            cari_pestisida = st.text_input("🔍 Cari Nama Anggota:")
+        with col_p_s2:
+            filter_pestisida_status = st.selectbox("Status Tagihan:", ["Semua Status", "Belum Lunas", "Lunas"])
             
-            if submit_p:
-                conn = get_db_connection()
-                c = conn.cursor()
-                c.execute("UPDATE pestisida SET status = ? WHERE nama = ?", (status_baru_p, pilih_anggota_p))
-                conn.commit()
-                conn.close()
-                st.success(f"Status tagihan **{pilih_anggota_p}** diperbarui menjadi **{status_baru_p}**!")
-                st.rerun()
+        df_p_show = df_pestisida.copy()
+        if cari_pestisida:
+            df_p_show = df_p_show[df_p_show['nama'].str.contains(cari_pestisida, case=False, na=False)]
+        if filter_pestisida_status != "Semua Status":
+            df_p_show = df_p_show[df_p_show['status'] == filter_pestisida_status]
+            
+        st.dataframe(df_p_show, use_container_width=True)
+        st.download_button("📥 Unduh Tagihan Pestisida (CSV)", df_pestisida.to_csv(index=False), "Tagihan_Pestisida.csv", "text/csv")
+        
+        if is_admin:
+            st.markdown("---")
+            st.subheader("⚙️ Update Status Pelunasan Pestisida")
+            with st.form("form_update_pestisida"):
+                pilih_anggota_p = st.selectbox("Pilih Anggota:", df_pestisida['nama'].tolist())
+                status_baru_p = st.selectbox("Status Baru:", ["Belum Lunas", "Lunas"])
+                submit_p = st.form_submit_button("Update Status")
+                
+                if submit_p:
+                    conn = get_db_connection()
+                    c = conn.cursor()
+                    c.execute("UPDATE pestisida SET status = ? WHERE nama = ? AND musim = ?", (status_baru_p, pilih_anggota_p, musim_aktif))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"Status tagihan **{pilih_anggota_p}** diperbarui menjadi **{status_baru_p}**!")
+                    st.rerun()
+    else:
+        st.info("💡 Belum ada tagihan pestisida untuk musim baru ini.")
 
 # -------------------- KREDIT BARANG --------------------
 elif menu == "💳 Kredit & Cicilan Barang":
     st.title("💳 Laporan Kredit & Cicilan Barang Anggota")
+    st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
     
     k1, k2, k3 = st.columns(3)
     k1.metric("Total Nilai Barang", f"Rp {tot_nilai_kredit:,.0f}".replace(',', '.'))
@@ -417,65 +456,75 @@ elif menu == "💳 Kredit & Cicilan Barang":
     
     st.markdown("---")
     
-    col_k1, col_k2 = st.columns([2, 1])
-    with col_k1:
-        cari_kredit = st.text_input("🔍 Cari Nama Anggota / Barang:")
-    with col_k2:
-        filter_status = st.selectbox("Status Pembayaran", ["Semua Status", "Berjalan", "Lunas"])
-        
-    df_kredit_show = df_kredit.copy()
-    if cari_kredit:
-        df_kredit_show = df_kredit_show[
-            df_kredit_show['nama_anggota'].str.contains(cari_kredit, case=False, na=False) |
-            df_kredit_show['nama_barang'].str.contains(cari_kredit, case=False, na=False)
-        ]
-    if filter_status != "Semua Status":
-        df_kredit_show = df_kredit_show[df_kredit_show['status'] == filter_status]
-        
-    st.dataframe(df_kredit_show, use_container_width=True)
-    st.download_button("📥 Unduh Laporan Kredit (CSV)", df_kredit.to_csv(index=False), "Laporan_Kredit.csv", "text/csv")
-    
-    if is_admin:
-        st.markdown("---")
-        st.subheader("➕ Form Catat Pembayaran Angsuran (Pengurus Only)")
-        with st.form("form_angsuran"):
-            pilih_pembayar = st.selectbox("Pilih Anggota", df_kredit[df_kredit['status'] == "Berjalan"]['nama_anggota'].tolist() if not df_kredit[df_kredit['status'] == "Berjalan"].empty else ["Tidak Ada Kredit Berjalan"])
-            nominal_angsuran = st.number_input("Nominal Angsuran (Rp)", min_value=10000, step=50000)
+    if not df_kredit.empty:
+        col_k1, col_k2 = st.columns([2, 1])
+        with col_k1:
+            cari_kredit = st.text_input("🔍 Cari Nama Anggota / Barang:")
+        with col_k2:
+            filter_status = st.selectbox("Status Pembayaran", ["Semua Status", "Berjalan", "Lunas"])
             
-            simpan_angsuran = st.form_submit_button("Simpan Angsuran")
-            if simpan_angsuran and pilih_pembayar != "Tidak Ada Kredit Berjalan":
-                conn = get_db_connection()
-                c = conn.cursor()
-                c.execute("UPDATE kredit SET angsuran_masuk = angsuran_masuk + ? WHERE nama_anggota = ?", (nominal_angsuran, pilih_pembayar))
+        df_kredit_show = df_kredit.copy()
+        if cari_kredit:
+            df_kredit_show = df_kredit_show[
+                df_kredit_show['nama_anggota'].str.contains(cari_kredit, case=False, na=False) |
+                df_kredit_show['nama_barang'].str.contains(cari_kredit, case=False, na=False)
+            ]
+        if filter_status != "Semua Status":
+            df_kredit_show = df_kredit_show[df_kredit_show['status'] == filter_status]
+            
+        st.dataframe(df_kredit_show, use_container_width=True)
+        st.download_button("📥 Unduh Laporan Kredit (CSV)", df_kredit.to_csv(index=False), "Laporan_Kredit.csv", "text/csv")
+        
+        if is_admin:
+            st.markdown("---")
+            st.subheader("➕ Form Catat Pembayaran Angsuran")
+            with st.form("form_angsuran"):
+                pilih_pembayar = st.selectbox("Pilih Anggota", df_kredit[df_kredit['status'] == "Berjalan"]['nama_anggota'].tolist() if not df_kredit[df_kredit['status'] == "Berjalan"].empty else ["Tidak Ada Kredit Berjalan"])
+                nominal_angsuran = st.number_input("Nominal Angsuran (Rp)", min_value=10000, step=50000)
                 
-                # Check status lunas
-                c.execute("SELECT harga_total, (dp + angsuran_masuk) as total FROM kredit WHERE nama_anggota = ?", (pilih_pembayar,))
-                row = c.fetchone()
-                if row and row['total'] >= row['harga_total']:
-                    c.execute("UPDATE kredit SET status = 'Lunas' WHERE nama_anggota = ?", (pilih_pembayar,))
+                simpan_angsuran = st.form_submit_button("Simpan Angsuran")
+                if simpan_angsuran and pilih_pembayar != "Tidak Ada Kredit Berjalan":
+                    conn = get_db_connection()
+                    c = conn.cursor()
+                    c.execute("UPDATE kredit SET angsuran_masuk = angsuran_masuk + ? WHERE nama_anggota = ? AND musim = ?", (nominal_angsuran, pilih_pembayar, musim_aktif))
                     
-                conn.commit()
-                conn.close()
-                st.success(f"Berhasil mencatat angsuran **{pilih_pembayar}** sebesar **Rp {nominal_angsuran:,.0f}**!")
-                st.rerun()
+                    c.execute("SELECT harga_total, (dp + angsuran_masuk) as total FROM kredit WHERE nama_anggota = ? AND musim = ?", (pilih_pembayar, musim_aktif))
+                    row = c.fetchone()
+                    if row and row['total'] >= row['harga_total']:
+                        c.execute("UPDATE kredit SET status = 'Lunas' WHERE nama_anggota = ? AND musim = ?", (pilih_pembayar, musim_aktif))
+                        
+                    conn.commit()
+                    conn.close()
+                    st.success(f"Berhasil mencatat angsuran **{pilih_pembayar}** sebesar **Rp {nominal_angsuran:,.0f}**!")
+                    st.rerun()
+    else:
+        st.info("💡 Belum ada data kredit barang untuk musim baru ini.")
 
 # -------------------- PENGELUARAN --------------------
 elif menu == "💸 Rincian Pengeluaran":
     st.title("💸 Laporan Pengeluaran & Belanja Modal")
-    st.metric("TOTAL PENGELUARAN", f"Rp {tot_pengeluaran:,.0f}".replace(',', '.'))
+    st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
+    st.metric("TOTAL PENGELUARAN MUSIM INI", f"Rp {tot_pengeluaran:,.0f}".replace(',', '.'))
     st.markdown("---")
     
-    df_exp_cat = df_pengeluaran.groupby("KATEGORI")["JUMLAH"].sum().reset_index().sort_values(by="JUMLAH", ascending=False)
-    fig_exp = px.bar(df_exp_cat, x="KATEGORI", y="JUMLAH", text="JUMLAH", color="KATEGORI")
-    fig_exp.update_traces(texttemplate='Rp %{text:,.0f}', textposition='outside')
-    st.plotly_chart(fig_exp, use_container_width=True)
-    
-    st.dataframe(df_pengeluaran, use_container_width=True)
-    st.download_button("📥 Unduh Rincian Pengeluaran (CSV)", df_pengeluaran.to_csv(index=False), "Rincian_Pengeluaran.csv", "text/csv")
+    if "OKT 2026" in musim_aktif:
+        df_exp_cat = df_pengeluaran.groupby("KATEGORI")["JUMLAH"].sum().reset_index().sort_values(by="JUMLAH", ascending=False)
+        fig_exp = px.bar(df_exp_cat, x="KATEGORI", y="JUMLAH", text="JUMLAH", color="KATEGORI")
+        fig_exp.update_traces(texttemplate='Rp %{text:,.0f}', textposition='outside')
+        st.plotly_chart(fig_exp, use_container_width=True)
+        st.dataframe(df_pengeluaran, use_container_width=True)
+        st.download_button("📥 Unduh Rincian Pengeluaran (CSV)", df_pengeluaran.to_csv(index=False), "Rincian_Pengeluaran.csv", "text/csv")
+    else:
+        if not df_transaksi.empty:
+            df_peng_baru = df_transaksi[df_transaksi['jenis'] == 'Pengeluaran']
+            st.dataframe(df_peng_baru, use_container_width=True)
+        else:
+            st.info("💡 Belum ada pengeluaran yang dicatat untuk musim baru ini.")
 
 # -------------------- TAMBAH TRANSAKSI --------------------
 elif menu == "➕ Tambah Transaksi":
     st.title("📝 Input Transaksi Kas Baru")
+    st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
     
     if not is_admin:
         st.warning("🔒 Halaman ini khusus Pengurus. Silakan masukkan PIN Pengurus di panel samping kiri terlebih dahulu.")
@@ -486,13 +535,39 @@ elif menu == "➕ Tambah Transaksi":
             keterangan = st.text_input("Keterangan Transaksi")
             jumlah_rp = st.number_input("Jumlah (Rupiah)", min_value=0, step=50000)
             
-            submitted = st.form_submit_button("Simpan Transaksi Permanen")
+            submitted = st.form_submit_button("Simpan Transaksi")
             if submitted and keterangan:
                 conn = get_db_connection()
                 c = conn.cursor()
                 c.execute("INSERT INTO transaksi (musim, tanggal, jenis, kategori, keterangan, jumlah) VALUES (?, date('now'), ?, ?, ?, ?)",
-                          (musim_pilihan, jenis, kategori, keterangan, jumlah_rp))
+                          (musim_aktif, jenis, kategori, keterangan, jumlah_rp))
                 conn.commit()
                 conn.close()
-                st.success(f"Berhasil menyimpan {jenis}: **{keterangan}** sebesar **Rp {jumlah_rp:,.0f}** secara permanen!")
+                st.success(f"Berhasil menyimpan {jenis}: **{keterangan}** sebesar **Rp {jumlah_rp:,.0f}**!")
+                st.rerun()
+
+# -------------------- TUTUP BUKU & RESET MUSIM --------------------
+elif menu == "🔴 Tutup Buku & Reset Musim":
+    st.title("🔴 Fitur Tutup Buku & Reset untuk Musim Baru")
+    
+    if not is_admin:
+        st.warning("🔒 Halaman ini khusus Pengurus. Silakan masukkan PIN Pengurus di panel samping kiri terlebih dahulu.")
+    else:
+        st.error("⚠️ **Perhatian Pengurus:** Fitur ini akan menutup pembukuan musim aktif saat ini dan memindahkan Saldo Akhir Kas sebagai Saldo Awal Musim Baru.")
+        
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            st.metric("Musim Aktif Saat Ini", musim_aktif)
+            st.metric("Saldo Akhir Kas Yang Dialihkan", f"Rp {saldo_akhir_kas:,.0f}".replace(',', '.'))
+            
+        with col_t2:
+            nama_musim_baru = st.text_input("Ketik Nama Musim Baru:", value="APRIL 2027 (Musim Gadu)")
+            konfirmasi_tutup = st.button("🚀 Konfirmasi Tutup Buku & Mulai Musim Baru")
+            
+            if konfirmasi_tutup and nama_musim_baru:
+                set_setting('saldo_awal', saldo_akhir_kas)
+                set_setting('musim_aktif', nama_musim_baru)
+                
+                st.balloons()
+                st.success(f"✅ Berhasil Tutup Buku! Musim baru **'{nama_musim_baru}'** telah aktif dengan Saldo Awal **Rp {saldo_akhir_kas:,.0f}**.")
                 st.rerun()
