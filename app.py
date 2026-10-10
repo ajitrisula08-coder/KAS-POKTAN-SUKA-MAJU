@@ -9,6 +9,27 @@ st.set_page_config(
     page_title="Sistem Kas POKTAN SUKA MAJU", page_icon="🌾", layout="wide"
 )
 
+# CSS Kustom untuk menaikkan posisi logo dan merapatkan menu di sidebar
+st.markdown(
+    """
+    <style>
+        section[data-testid="stSidebar"] .block-container {
+            padding-top: 1rem !important;
+            gap: 0.3rem !important;
+        }
+        div[data-testid="stSidebar"] img {
+            margin-top: -15px !important;
+            margin-bottom: -10px !important;
+        }
+        div[data-testid="stSidebar"] h1 {
+            padding-top: 0px !important;
+            margin-top: 0px !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # Helper Fungsi Tampil Logo Spesifik Container
 def render_logo(container, width=130):
@@ -957,7 +978,7 @@ tot_sisa_piutang = (
 )
 
 # -------------------- SIDEBAR SETTINGS & LOGIN --------------------
-# Render logo dengan ukuran lebih pas di sidebar (width=130)
+# Render logo rapat di bagian paling atas
 render_logo(st.sidebar, width=130)
 
 st.sidebar.title("POKTAN SUKA MAJU")
