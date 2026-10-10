@@ -11,7 +11,7 @@ st.set_page_config(
 
 
 # Helper Fungsi Tampil Logo Spesifik Container
-def render_logo(container, width=80):
+def render_logo(container, width=130):
   logo_files = ["logo.png", "logo.jpg", "logo.jpeg", "Logo.png", "LOGO.PNG"]
   for logo_file in logo_files:
     if os.path.exists(logo_file):
@@ -957,8 +957,8 @@ tot_sisa_piutang = (
 )
 
 # -------------------- SIDEBAR SETTINGS & LOGIN --------------------
-# Render logo tepat di atas judul sidebar
-render_logo(st.sidebar, width=80)
+# Render logo dengan ukuran lebih pas di sidebar (width=130)
+render_logo(st.sidebar, width=130)
 
 st.sidebar.title("POKTAN SUKA MAJU")
 st.sidebar.caption("Aplikasi Kas & Unit Usaha")
