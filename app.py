@@ -253,7 +253,7 @@ tot_rotavator = df_rotavator["SISA_NETTO"].sum()
 tot_pestisida = df_pestisida["jumlah_tagihan"].sum()
 tot_oven = df_oven["JUMLAH_RP"].sum()
 
-pemasukan_kios = 9519000
+pemasukan_kios = 0
 tot_pemasukan_usaha = tot_combine + tot_rotavator + tot_pestisida + tot_oven
 
 # Tambahan transaksi masuk/keluar dari DB
