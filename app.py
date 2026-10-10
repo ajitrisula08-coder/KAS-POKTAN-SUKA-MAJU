@@ -156,7 +156,7 @@ def get_static_data():
         {"NO": 2, "RINCIAN": "BELANJA KIOS", "JUMLAH": 2845000, "KATEGORI": "Pupuk & Obat"},
         {"NO": 3, "RINCIAN": "BELANJA OBAT2 (MS RONI PEMADAM)", "JUMLAH": 1458000, "KATEGORI": "Pupuk & Obat"},
         {"NO": 4, "RINCIAN": "BLNJA OBT P JOKO", "JUMLAH": 270000, "KATEGORI": "Pupuk & Obat"},
-        {"NO": 12, "RINCIAN": "BELANJA KIOS", "JUMLAH": 2835000, "KATEGORI": "Pupuk & Obat"},
+        {"NO": 12, "RINCIAN": "BELANJA KIOS", "JUMLAH": 11793000, "KATEGORI": "Pupuk & Obat"},
         {"NO": 5, "RINCIAN": "wadah kios", "JUMLAH": 50000, "KATEGORI": "Operasional Kios"},
         {"NO": 6, "RINCIAN": "KONSUMSI SYUKURAN", "JUMLAH": 675000, "KATEGORI": "Konsumsi & Dinas"},
         {"NO": 7, "RINCIAN": "SOLAR MS RONI 1", "JUMLAH": 800000, "KATEGORI": "Bahan Bakar"},
