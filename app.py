@@ -11,16 +11,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Helper Fungsi Tampil Logo Aman
-def render_logo(width=None):
-    # Cek beberapa format nama file logo
+# Helper Fungsi Tampil Logo Aman & Kecil
+def render_logo(width=70):
     logo_files = ["logo.png", "logo.jpg", "logo.jpeg", "Logo.png", "LOGO.PNG"]
     for logo_file in logo_files:
         if os.path.exists(logo_file):
-            if width:
-                st.image(logo_file, width=width)
-            else:
-                st.image(logo_file, use_container_width=True)
+            st.image(logo_file, width=width)
             return True
     return False
 
@@ -283,12 +279,12 @@ tot_kredit_terbayar = df_kredit["TOTAL_TERBAYAR"].sum() if not df_kredit.empty e
 tot_sisa_piutang = df_kredit["SISA_PIUTANG"].sum() if not df_kredit.empty else 0
 
 # -------------------- SIDEBAR SETTINGS & LOGIN --------------------
-# Tampilkan logo di sidebar jika tersedia
-if not render_logo():
+# Tampilkan logo kecil di pojok kiri atas sidebar (width=70)
+if not render_logo(width=70):
     st.sidebar.markdown("### 🌾 POKTAN SUKA MAJU")
 
 st.sidebar.title("POKTAN SUKA MAJU")
-st.sidebar.markdown("**Aplikasi Kas & Unit Usaha**")
+st.sidebar.caption("Aplikasi Kas & Unit Usaha")
 
 # Mode Akses
 st.sidebar.markdown("---")
@@ -337,9 +333,9 @@ menu = st.sidebar.radio(
 
 # -------------------- DASHBOARD UTAMA --------------------
 if menu == "📊 Dasbor Utama":
-    col_logo, col_title = st.columns([1, 5])
+    col_logo, col_title = st.columns([1, 6])
     with col_logo:
-        if not render_logo(width=110):
+        if not render_logo(width=80):
             st.title("🌾")
     with col_title:
         st.title("Dasbor Utama Kas POKTAN SUKA MAJU")
