@@ -102,14 +102,18 @@ def init_db():
   c.execute("DELETE FROM transaksi WHERE musim LIKE '%OKT 2026%'")
   c.execute("DELETE FROM settings WHERE key LIKE '%OKT 2026%'")
 
-  # Set Default Musim Sekarang
+  # Set Default Musim Sekarang & Saldo Awal Rp 233.235.079
   c.execute(
       "INSERT OR IGNORE INTO settings (key, value) VALUES ('musim_aktif',"
       " 'APRIL 2027 (Musim Gadu)')"
   )
   c.execute(
-      "INSERT OR IGNORE INTO settings (key, value) VALUES"
-      " ('saldo_awal_APRIL 2027 (Musim Gadu)', '0')"
+      "INSERT OR REPLACE INTO settings (key, value) VALUES"
+      " ('saldo_awal_APRIL 2027 (Musim Gadu)', '233235079')"
+  )
+  c.execute(
+      "INSERT OR REPLACE INTO settings (key, value) VALUES ('saldo_awal',"
+      " '233235079')"
   )
 
   conn.commit()
@@ -142,7 +146,7 @@ def set_setting(key, value):
 def get_saldo_awal_musim(musim):
   val = get_setting(f"saldo_awal_{musim}", None)
   if val is None:
-    return float(get_setting("saldo_awal", "0"))
+    return float(get_setting("saldo_awal", "233235079"))
   return float(val)
 
 
