@@ -1452,7 +1452,7 @@ elif menu == "💸 Rincian Pengeluaran":
         f" **{musim_laporan}**."
     )
 
-# -------------------- TAMBAH TRANSAKSI --------------------
+# -------------------- TAMBAH TRANSAKSI & HAPUS TRANSAKSI --------------------
 elif menu == "➕ Tambah Transaksi":
   st.title("📝 Input Transaksi Kas Baru")
   st.caption(
@@ -1466,6 +1466,7 @@ elif menu == "➕ Tambah Transaksi":
         " samping kiri terlebih dahulu."
     )
   else:
+    # Form Input Transaksi Baru
     with st.form("form_transaksi"):
       jenis = st.selectbox("Jenis Transaksi", ["Pemasukan", "Pengeluaran"])
       kategori = st.selectbox(
@@ -1478,6 +1479,7 @@ elif menu == "➕ Tambah Transaksi":
               "Kredit Barang",
               "Belanja Modal",
               "Bahan Bakar",
+              "Lainnya",
           ],
       )
       keterangan = st.text_input("Keterangan Transaksi")
@@ -1499,6 +1501,46 @@ elif menu == "➕ Tambah Transaksi":
             f" {jumlah_rp:,.0f}**!"
         )
         st.rerun()
+
+    # Form Hapus Transaksi
+    st.markdown("---")
+    st.subheader("🗑️ Hapus / Kelola Transaksi Manual")
+
+    conn = get_db_connection()
+    df_all_trans = pd.read_sql_query(
+        "SELECT id, tanggal, jenis, kategori, keterangan, jumlah FROM"
+        " transaksi WHERE musim = ?",
+        conn,
+        params=(musim_aktif,),
+    )
+    conn.close()
+
+    if not df_all_trans.empty:
+      st.dataframe(df_all_trans, use_container_width=True)
+      with st.form("form_hapus_transaksi"):
+        options_trans = [
+            f"ID: {row['id']} | {row['jenis']} - {row['kategori']} -"
+            f" {row['keterangan']} (Rp {row['jumlah']:,.0f})"
+            for _, row in df_all_trans.iterrows()
+        ]
+        trans_to_delete = st.selectbox(
+            "Pilih Transaksi yang Mau Dihapus:", options_trans
+        )
+        btn_delete = st.form_submit_button("🗑️ Hapus Transaksi Ini")
+
+        if btn_delete and trans_to_delete:
+          selected_id = int(
+              trans_to_delete.split("|")[0].replace("ID:", "").strip()
+          )
+          conn = get_db_connection()
+          c = conn.cursor()
+          c.execute("DELETE FROM transaksi WHERE id = ?", (selected_id,))
+          conn.commit()
+          conn.close()
+          st.success(f"Berhasil menghapus transaksi dengan ID {selected_id}!")
+          st.rerun()
+    else:
+      st.info("Belum ada transaksi manual yang dicatat di musim aktif ini.")
 
 # -------------------- TUTUP BUKU & RESET MUSIM --------------------
 elif menu == "🔴 Tutup Buku & Reset Musim":
