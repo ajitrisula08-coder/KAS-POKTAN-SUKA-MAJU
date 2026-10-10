@@ -223,22 +223,6 @@ def set_setting(key, value):
   conn.close()
 
 
-def get_all_musim():
-  conn = get_db_connection()
-  c = conn.cursor()
-  musim_set = {"OKT 2026 (Musim Rendeng)"}
-  musim_aktif_val = get_setting("musim_aktif", "OKT 2026 (Musim Rendeng)")
-  musim_set.add(musim_aktif_val)
-
-  for table in ["pestisida", "kredit", "transaksi"]:
-    c.execute(f"SELECT DISTINCT musim FROM {table}")
-    for row in c.fetchall():
-      if row[0]:
-        musim_set.add(row[0])
-  conn.close()
-  return sorted(list(musim_set), reverse=True)
-
-
 # -------------------- DEFAULT STATIC DATA --------------------
 @st.cache_data
 def get_static_data():
@@ -921,27 +905,84 @@ def get_static_data():
 musim_aktif = get_setting("musim_aktif", "OKT 2026 (Musim Rendeng)")
 saldo_musim_lalu = float(get_setting("saldo_awal", "206744480"))
 
+conn = get_db_connection()
+df_pestisida = pd.read_sql_query(
+    "SELECT * FROM pestisida WHERE musim = ?", conn, params=(musim_aktif,)
+)
+df_kredit = pd.read_sql_query(
+    "SELECT * FROM kredit WHERE musim = ?", conn, params=(musim_aktif,)
+)
+df_transaksi = pd.read_sql_query(
+    "SELECT * FROM transaksi WHERE musim = ?", conn, params=(musim_aktif,)
+)
+conn.close()
+
+if not df_kredit.empty:
+  df_kredit["TOTAL_TERBAYAR"] = df_kredit["dp"] + df_kredit["angsuran_masuk"]
+  df_kredit["SISA_PIUTANG"] = (
+      df_kredit["harga_total"] - df_kredit["TOTAL_TERBAYAR"]
+  )
+else:
+  df_kredit = pd.DataFrame(columns=[
+      "id",
+      "musim",
+      "no",
+      "nama_anggota",
+      "nama_barang",
+      "harga_total",
+      "dp",
+      "angsuran_masuk",
+      "status",
+      "TOTAL_TERBAYAR",
+      "SISA_PIUTANG",
+  ])
+
+# Total Perhitungan Pemasukan & Pengeluaran Per Musim
+tot_combine = df_combine["JUMLAH_RP"].sum() if "OKT 2026" in musim_aktif else 0
+tot_rotavator = df_rotavator["SISA_NETTO"].sum() if "OKT 2026" in musim_aktif else 0
+tot_pestisida = (
+    df_pestisida["jumlah_tagihan"].sum() if not df_pestisida.empty else 0
+)
+tot_oven = df_oven["JUMLAH_RP"].sum() if "OKT 2026" in musim_aktif else 0
+
+pemasukan_kios = 9519000 if "OKT 2026" in musim_aktif else 0
+pemasukan_tambahan = (
+    df_transaksi[df_transaksi["jenis"] == "Pemasukan"]["jumlah"].sum()
+    if not df_transaksi.empty
+    else 0
+)
+tot_pemasukan_usaha = (
+    tot_combine + tot_rotavator + tot_pestisida + tot_oven + pemasukan_tambahan
+)
+
+pengeluaran_tambahan = (
+    df_transaksi[df_transaksi["jenis"] == "Pengeluaran"]["jumlah"].sum()
+    if not df_transaksi.empty
+    else 0
+)
+tot_pengeluaran = (
+    df_pengeluaran["JUMLAH"].sum() if "OKT 2026" in musim_aktif else 0
+) + pengeluaran_tambahan
+
+sisa_saldo_kios = (saldo_musim_lalu + pemasukan_kios) - tot_pengeluaran
+saldo_akhir_kas = tot_pemasukan_usaha + sisa_saldo_kios
+
+tot_nilai_kredit = (
+    df_kredit["harga_total"].sum() if not df_kredit.empty else 0
+)
+tot_kredit_terbayar = (
+    df_kredit["TOTAL_TERBAYAR"].sum() if not df_kredit.empty else 0
+)
+tot_sisa_piutang = (
+    df_kredit["SISA_PIUTANG"].sum() if not df_kredit.empty else 0
+)
+
 # -------------------- SIDEBAR SETTINGS & LOGIN --------------------
+# Render logo rapat di bagian paling atas
 render_logo(st.sidebar, width=130)
 
 st.sidebar.title("POKTAN SUKA MAJU")
 st.sidebar.caption("Aplikasi Kas & Unit Usaha")
-
-# Filter Pilih Musim Laporan
-st.sidebar.markdown("---")
-st.sidebar.subheader("🗓️ Pilih Musim Laporan")
-daftar_musim = get_all_musim()
-musim_laporan = st.sidebar.selectbox(
-    "Lihat Data Musim:",
-    options=daftar_musim,
-    index=daftar_musim.index(musim_aktif)
-    if musim_aktif in daftar_musim
-    else 0,
-)
-if musim_laporan == musim_aktif:
-  st.sidebar.info(f"📍 **{musim_laporan}** (Musim Aktif Operasional)")
-else:
-  st.sidebar.warning(f"📜 **{musim_laporan}** (Arsip Musim Lalu)")
 
 # Mode Akses
 st.sidebar.markdown("---")
@@ -961,6 +1002,11 @@ if mode_akses == "🔐 Mode Pengurus (Akses Edit)":
     st.sidebar.success("Akses Pengurus Aktif")
   elif pin_input != "":
     st.sidebar.error("PIN Salah!")
+
+# Tampil Musim Aktif
+st.sidebar.markdown("---")
+st.sidebar.subheader("🗓️ Musim Aktif Tanam")
+st.sidebar.info(f"📍 **{musim_aktif}**")
 
 # Input Saldo Awal Musim Manual
 if is_admin:
@@ -990,88 +1036,12 @@ menu = st.sidebar.radio(
     ],
 )
 
-# -------------------- QUERY DATA BERDASARKAN MUSIM LAPORAN --------------------
-conn = get_db_connection()
-df_pestisida = pd.read_sql_query(
-    "SELECT * FROM pestisida WHERE musim = ?", conn, params=(musim_laporan,)
-)
-df_kredit = pd.read_sql_query(
-    "SELECT * FROM kredit WHERE musim = ?", conn, params=(musim_laporan,)
-)
-df_transaksi = pd.read_sql_query(
-    "SELECT * FROM transaksi WHERE musim = ?", conn, params=(musim_laporan,)
-)
-conn.close()
-
-if not df_kredit.empty:
-  df_kredit["TOTAL_TERBAYAR"] = df_kredit["dp"] + df_kredit["angsuran_masuk"]
-  df_kredit["SISA_PIUTANG"] = (
-      df_kredit["harga_total"] - df_kredit["TOTAL_TERBAYAR"]
-  )
-else:
-  df_kredit = pd.DataFrame(columns=[
-      "id",
-      "musim",
-      "no",
-      "nama_anggota",
-      "nama_barang",
-      "harga_total",
-      "dp",
-      "angsuran_masuk",
-      "status",
-      "TOTAL_TERBAYAR",
-      "SISA_PIUTANG",
-  ])
-
-# Logic Tampil Data Static (Khusus OKT 2026) vs Data Dinamis SQLite
-is_okt_2026 = "OKT 2026" in musim_laporan
-
-tot_combine = df_combine["JUMLAH_RP"].sum() if is_okt_2026 else 0
-tot_rotavator = df_rotavator["SISA_NETTO"].sum() if is_okt_2026 else 0
-tot_pestisida = (
-    df_pestisida["jumlah_tagihan"].sum() if not df_pestisida.empty else 0
-)
-tot_oven = df_oven["JUMLAH_RP"].sum() if is_okt_2026 else 0
-
-pemasukan_kios = 9519000 if is_okt_2026 else 0
-pemasukan_tambahan = (
-    df_transaksi[df_transaksi["jenis"] == "Pemasukan"]["jumlah"].sum()
-    if not df_transaksi.empty
-    else 0
-)
-tot_pemasukan_usaha = (
-    tot_combine + tot_rotavator + tot_pestisida + tot_oven + pemasukan_tambahan
-)
-
-pengeluaran_tambahan = (
-    df_transaksi[df_transaksi["jenis"] == "Pengeluaran"]["jumlah"].sum()
-    if not df_transaksi.empty
-    else 0
-)
-tot_pengeluaran = (
-    (df_pengeluaran["JUMLAH"].sum() if is_okt_2026 else 0)
-    + pengeluaran_tambahan
-)
-
-sisa_saldo_kios = (saldo_musim_lalu + pemasukan_kios) - tot_pengeluaran
-saldo_akhir_kas = tot_pemasukan_usaha + sisa_saldo_kios
-
-tot_nilai_kredit = (
-    df_kredit["harga_total"].sum() if not df_kredit.empty else 0
-)
-tot_kredit_terbayar = (
-    df_kredit["TOTAL_TERBAYAR"].sum() if not df_kredit.empty else 0
-)
-tot_sisa_piutang = (
-    df_kredit["SISA_PIUTANG"].sum() if not df_kredit.empty else 0
-)
-
 # -------------------- DASHBOARD UTAMA --------------------
 if menu == "📊 Dasbor Utama":
   st.title("Dasbor Utama Kas POKTAN SUKA MAJU")
   st.caption(
-      f"Status Pengguna: **{mode_akses}** | Menampilkan Laporan Musim:"
-      f" **{musim_laporan}**"
+      f"Status Pengguna: **{mode_akses}** | Musim Tanam Aktif:"
+      f" **{musim_aktif}**"
   )
 
   col1, col2, col3, col4 = st.columns(4)
@@ -1091,8 +1061,8 @@ if menu == "📊 Dasbor Utama":
   st.markdown("---")
 
   st.info(
-      f"💡 **Informasi Ringkasan Kas ({musim_laporan}):** Saldo Awal Musim ="
-      f" **Rp {saldo_musim_lalu:,.0f}** | Sisa Piutang Kredit = **Rp"
+      f"💡 **Informasi Ringkasan Kas:** Saldo Awal Musim Ini = **Rp"
+      f" {saldo_musim_lalu:,.0f}** | Sisa Piutang Kredit = **Rp"
       f" {tot_sisa_piutang:,.0f}**."
   )
 
@@ -1139,7 +1109,7 @@ if menu == "📊 Dasbor Utama":
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
-  st.markdown(f"### 📝 Tabel Rekap Pemasukan Musim ({musim_laporan})")
+  st.markdown("### 📝 Tabel Rekap Pemasukan Musim Ini")
   df_rekap_show = pd.DataFrame({
       "Sumber Pemasukan": [
           "1. REKAP COMBINE",
@@ -1162,16 +1132,16 @@ if menu == "📊 Dasbor Utama":
   st.download_button(
       "📥 Unduh Ringkasan Kas (CSV)",
       df_rekap_show.to_csv(index=False),
-      f"Ringkasan_Kas_{musim_laporan}.csv",
+      "Ringkasan_Kas_Poktan.csv",
       "text/csv",
   )
 
 # -------------------- UNIT COMBINE --------------------
 elif menu == "🚜 Unit Combine (Panen)":
   st.title("🚜 Laporan Hasil Panen - Combine Harvester")
-  st.caption(f"Menampilkan Data Musim: **{musim_laporan}**")
+  st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
 
-  if is_okt_2026:
+  if "OKT 2026" in musim_aktif:
     c1, c2, c3 = st.columns(3)
     c1.metric(
         "Total Karung Gabah",
@@ -1197,20 +1167,17 @@ elif menu == "🚜 Unit Combine (Panen)":
         "text/csv",
     )
   else:
-    df_cb_baru = df_transaksi[df_transaksi["kategori"] == "Combine"]
-    if not df_cb_baru.empty:
-      st.dataframe(df_cb_baru, use_container_width=True)
-    else:
-      st.info(
-          f"💡 Belum ada data transaksi Combine untuk musim **{musim_laporan}**."
-      )
+    st.info(
+        "💡 Belum ada data transaksi Combine bawaan untuk musim baru ini."
+        " Gunakan menu 'Tambah Transaksi' untuk mencatat pemasukan baru."
+    )
 
 # -------------------- UNIT ROTAVATOR --------------------
 elif menu == "⚙️ Unit Rotavator (Lahan)":
   st.title("⚙️ Laporan Pengolahan Lahan - Rotavator")
-  st.caption(f"Menampilkan Data Musim: **{musim_laporan}**")
+  st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
 
-  if is_okt_2026:
+  if "OKT 2026" in musim_aktif:
     r1, r2, r3 = st.columns(3)
     r1.metric("Total Luas Tergarap", f"{df_rotavator['LUAS_HA'].sum():.2f} Ha")
     r2.metric(
@@ -1228,19 +1195,12 @@ elif menu == "⚙️ Unit Rotavator (Lahan)":
         "text/csv",
     )
   else:
-    df_rv_baru = df_transaksi[df_transaksi["kategori"] == "Rotavator"]
-    if not df_rv_baru.empty:
-      st.dataframe(df_rv_baru, use_container_width=True)
-    else:
-      st.info(
-          f"💡 Belum ada data transaksi Rotavator untuk musim"
-          f" **{musim_laporan}**."
-      )
+    st.info("💡 Belum ada data transaksi Rotavator untuk musim baru ini.")
 
 # -------------------- UNIT PESTISIDA & KIOS --------------------
 elif menu == "🧪 Unit Pestisida & Kios":
   st.title("🧪 Laporan Belanja Obat & Pestisida Anggota")
-  st.caption(f"Menampilkan Data Musim: **{musim_laporan}**")
+  st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
 
   p1, p2, p3 = st.columns(3)
   p1.metric(
@@ -1274,7 +1234,7 @@ elif menu == "🧪 Unit Pestisida & Kios":
     st.download_button(
         "📥 Unduh Tagihan Pestisida (CSV)",
         df_pestisida.to_csv(index=False),
-        f"Tagihan_Pestisida_{musim_laporan}.csv",
+        "Tagihan_Pestisida.csv",
         "text/csv",
     )
 
@@ -1295,7 +1255,7 @@ elif menu == "🧪 Unit Pestisida & Kios":
           c = conn.cursor()
           c.execute(
               "UPDATE pestisida SET status = ? WHERE nama = ? AND musim = ?",
-              (status_baru_p, pilih_anggota_p, musim_laporan),
+              (status_baru_p, pilih_anggota_p, musim_aktif),
           )
           conn.commit()
           conn.close()
@@ -1305,14 +1265,12 @@ elif menu == "🧪 Unit Pestisida & Kios":
           )
           st.rerun()
   else:
-    st.info(
-        f"💡 Belum ada data tagihan pestisida untuk musim **{musim_laporan}**."
-    )
+    st.info("💡 Belum ada tagihan pestisida untuk musim baru ini.")
 
 # -------------------- KREDIT BARANG --------------------
 elif menu == "💳 Kredit & Cicilan Barang":
   st.title("💳 Laporan Kredit & Cicilan Barang Anggota")
-  st.caption(f"Menampilkan Data Musim: **{musim_laporan}**")
+  st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
 
   k1, k2, k3 = st.columns(3)
   k1.metric(
@@ -1356,7 +1314,7 @@ elif menu == "💳 Kredit & Cicilan Barang":
     st.download_button(
         "📥 Unduh Laporan Kredit (CSV)",
         df_kredit.to_csv(index=False),
-        f"Laporan_Kredit_{musim_laporan}.csv",
+        "Laporan_Kredit.csv",
         "text/csv",
     )
 
@@ -1385,20 +1343,20 @@ elif menu == "💳 Kredit & Cicilan Barang":
           c.execute(
               "UPDATE kredit SET angsuran_masuk = angsuran_masuk + ? WHERE"
               " nama_anggota = ? AND musim = ?",
-              (nominal_angsuran, pilih_pembayar, musim_laporan),
+              (nominal_angsuran, pilih_pembayar, musim_aktif),
           )
 
           c.execute(
               "SELECT harga_total, (dp + angsuran_masuk) as total FROM kredit"
               " WHERE nama_anggota = ? AND musim = ?",
-              (pilih_pembayar, musim_laporan),
+              (pilih_pembayar, musim_aktif),
           )
           row = c.fetchone()
           if row and row["total"] >= row["harga_total"]:
             c.execute(
                 "UPDATE kredit SET status = 'Lunas' WHERE nama_anggota = ? AND"
                 " musim = ?",
-                (pilih_pembayar, musim_laporan),
+                (pilih_pembayar, musim_aktif),
             )
 
           conn.commit()
@@ -1409,18 +1367,18 @@ elif menu == "💳 Kredit & Cicilan Barang":
           )
           st.rerun()
   else:
-    st.info(f"💡 Belum ada data kredit barang untuk musim **{musim_laporan}**.")
+    st.info("💡 Belum ada data kredit barang untuk musim baru ini.")
 
 # -------------------- PENGELUARAN --------------------
 elif menu == "💸 Rincian Pengeluaran":
   st.title("💸 Laporan Pengeluaran & Belanja Modal")
-  st.caption(f"Menampilkan Data Musim: **{musim_laporan}**")
+  st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
   st.metric(
       "TOTAL PENGELUARAN MUSIM INI", f"Rp {tot_pengeluaran:,.0f}".replace(",", ".")
   )
   st.markdown("---")
 
-  if is_okt_2026:
+  if "OKT 2026" in musim_aktif:
     df_exp_cat = (
         df_pengeluaran.groupby("KATEGORI")["JUMLAH"]
         .sum()
@@ -1446,18 +1404,12 @@ elif menu == "💸 Rincian Pengeluaran":
       df_peng_baru = df_transaksi[df_transaksi["jenis"] == "Pengeluaran"]
       st.dataframe(df_peng_baru, use_container_width=True)
     else:
-      st.info(
-          f"💡 Belum ada pengeluaran yang dicatat untuk musim"
-          f" **{musim_laporan}**."
-      )
+      st.info("💡 Belum ada pengeluaran yang dicatat untuk musim baru ini.")
 
 # -------------------- TAMBAH TRANSAKSI --------------------
 elif menu == "➕ Tambah Transaksi":
   st.title("📝 Input Transaksi Kas Baru")
-  st.caption(
-      f"Transaksi baru akan otomatis dicatat ke Musim Aktif:"
-      f" **{musim_aktif}**"
-  )
+  st.caption(f"Musim Tanam Aktif: **{musim_aktif}**")
 
   if not is_admin:
     st.warning(
