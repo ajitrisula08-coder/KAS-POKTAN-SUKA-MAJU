@@ -1,15 +1,18 @@
 import os
-import sqlite3
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+
+# URL Google Sheets Database Kas Poktan
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1WrnS3pFzkIzIF8ekYGo1fHtMLfJ7QSEPYprJrdhdy48/edit?usp=drive_web"
 
 # Config Halaman Streamlit
 st.set_page_config(
     page_title="Sistem Kas POKTAN SUKA MAJU", page_icon="🌾", layout="wide"
 )
 
-# CSS Kustom untuk menaikkan posisi logo dan merapatkan menu di sidebar
+# CSS Kustom
 st.markdown(
     """
     <style>
@@ -31,7 +34,6 @@ st.markdown(
 )
 
 
-# Helper Fungsi Tampil Logo Spesifik Container
 def render_logo(container, width=130):
   logo_files = ["logo.png", "logo.jpg", "logo.jpeg", "Logo.png", "LOGO.PNG"]
   for logo_file in logo_files:
@@ -41,113 +43,85 @@ def render_logo(container, width=130):
   return False
 
 
-# -------------------- DATABASE INIT & STORAGE --------------------
-def get_db_connection():
-  conn = sqlite3.connect("kas_tani.db", check_same_thread=False)
-  conn.row_factory = sqlite3.Row
-  return conn
+# -------------------- GOOGLE SHEETS CONNECTION --------------------
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 
-def init_db():
-  conn = get_db_connection()
-  c = conn.cursor()
-
-  c.execute("""
-    CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT
-    )
-    """)
-
-  c.execute("""
-    CREATE TABLE IF NOT EXISTS pestisida (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        musim TEXT,
-        no INTEGER,
-        nama TEXT,
-        jumlah_tagihan REAL,
-        status TEXT
-    )
-    """)
-
-  c.execute("""
-    CREATE TABLE IF NOT EXISTS kredit (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        musim TEXT,
-        no INTEGER,
-        nama_anggota TEXT,
-        nama_barang TEXT,
-        harga_total REAL,
-        dp REAL,
-        angsuran_masuk REAL,
-        status TEXT
-    )
-    """)
-
-  c.execute("""
-    CREATE TABLE IF NOT EXISTS transaksi (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        musim TEXT,
-        tanggal TEXT,
-        jenis TEXT,
-        kategori TEXT,
-        keterangan TEXT,
-        jumlah REAL
-    )
-    """)
-
-  # Bersihkan data musim Oktober 2026 jika masih ada di database
-  c.execute("DELETE FROM pestisida WHERE musim LIKE '%OKT 2026%'")
-  c.execute("DELETE FROM kredit WHERE musim LIKE '%OKT 2026%'")
-  c.execute("DELETE FROM transaksi WHERE musim LIKE '%OKT 2026%'")
-  c.execute("DELETE FROM settings WHERE key LIKE '%OKT 2026%'")
-
-  # Set Default Musim Sekarang & Saldo Awal Rp 233.235.079
-  c.execute(
-      "INSERT OR IGNORE INTO settings (key, value) VALUES ('musim_aktif',"
-      " 'APRIL 2027 (Musim Gadu)')"
-  )
-  c.execute(
-      "INSERT OR REPLACE INTO settings (key, value) VALUES"
-      " ('saldo_awal_APRIL 2027 (Musim Gadu)', '233235079')"
-  )
-  c.execute(
-      "INSERT OR REPLACE INTO settings (key, value) VALUES ('saldo_awal',"
-      " '233235079')"
-  )
-
-  conn.commit()
-  conn.close()
+def load_sheet_data(worksheet_name, default_cols):
+  try:
+    df = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=worksheet_name, ttl=0)
+    if df.empty:
+      return pd.DataFrame(columns=default_cols)
+    return df
+  except Exception:
+    return pd.DataFrame(columns=default_cols)
 
 
-init_db()
+def save_sheet_data(worksheet_name, df):
+  conn.update(spreadsheet=SPREADSHEET_URL, worksheet=worksheet_name, data=df)
 
 
+# Columns Definition
+cols_settings = ["key", "value"]
+cols_transaksi = [
+    "id",
+    "musim",
+    "tanggal",
+    "jenis",
+    "kategori",
+    "keterangan",
+    "jumlah",
+]
+cols_pestisida = ["id", "musim", "no", "nama", "jumlah_tagihan", "status"]
+cols_kredit = [
+    "id",
+    "musim",
+    "no",
+    "nama_anggota",
+    "nama_barang",
+    "harga_total",
+    "dp",
+    "angsuran_masuk",
+    "status",
+]
+
+# Load All Dataframes from Sheets
+df_settings = load_sheet_data("settings", cols_settings)
+df_transaksi_all = load_sheet_data("transaksi", cols_transaksi)
+df_pestisida_all = load_sheet_data("pestisida", cols_pestisida)
+df_kredit_all = load_sheet_data("kredit", cols_kredit)
+
+
+# Helper Functions
 def get_setting(key, default_val=""):
-  conn = get_db_connection()
-  c = conn.cursor()
-  c.execute("SELECT value FROM settings WHERE key = ?", (key,))
-  row = c.fetchone()
-  conn.close()
-  return row["value"] if row else default_val
+  if not df_settings.empty and "key" in df_settings.columns:
+    match = df_settings[df_settings["key"] == key]
+    if not match.empty:
+      return str(match.iloc[0]["value"])
+  return default_val
 
 
 def set_setting(key, value):
-  conn = get_db_connection()
-  c = conn.cursor()
-  c.execute(
-      "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-      (key, str(value)),
-  )
-  conn.commit()
-  conn.close()
+  global df_settings
+  if df_settings.empty or "key" not in df_settings.columns:
+    df_settings = pd.DataFrame([{"key": key, "value": str(value)}])
+  else:
+    if key in df_settings["key"].values:
+      df_settings.loc[df_settings["key"] == key, "value"] = str(value)
+    else:
+      new_row = pd.DataFrame([{"key": key, "value": str(value)}])
+      df_settings = pd.concat([df_settings, new_row], ignore_index=True)
+  save_sheet_data("settings", df_settings)
 
 
 def get_saldo_awal_musim(musim):
   val = get_setting(f"saldo_awal_{musim}", None)
-  if val is None:
+  if val is None or str(val).strip() == "":
     return float(get_setting("saldo_awal", "233235079"))
-  return float(val)
+  try:
+    return float(val)
+  except ValueError:
+    return 233235079.0
 
 
 def set_saldo_awal_musim(musim, val):
@@ -155,38 +129,35 @@ def set_saldo_awal_musim(musim, val):
 
 
 def get_all_musim():
-  conn = get_db_connection()
-  c = conn.cursor()
   musim_set = set()
   musim_aktif_val = get_setting("musim_aktif", "APRIL 2027 (Musim Gadu)")
   musim_set.add(musim_aktif_val)
 
-  for table in ["pestisida", "kredit", "transaksi"]:
-    c.execute(f"SELECT DISTINCT musim FROM {table}")
-    for row in c.fetchall():
-      if row[0] and "OKT 2026" not in row[0]:
-        musim_set.add(row[0])
+  for df in [df_pestisida_all, df_kredit_all, df_transaksi_all]:
+    if not df.empty and "musim" in df.columns:
+      for m in df["musim"].dropna().unique():
+        if str(m) and "OKT 2026" not in str(m):
+          musim_set.add(str(m))
 
-  c.execute("SELECT key FROM settings WHERE key LIKE 'saldo_awal_%'")
-  for row in c.fetchall():
-    key_name = row[0].replace("saldo_awal_", "")
-    if key_name and "OKT 2026" not in key_name:
-      musim_set.add(key_name)
+  if not df_settings.empty and "key" in df_settings.columns:
+    for k in df_settings["key"].dropna().unique():
+      if str(k).startswith("saldo_awal_"):
+        key_name = str(k).replace("saldo_awal_", "")
+        if key_name and "OKT 2026" not in key_name:
+          musim_set.add(key_name)
 
-  conn.close()
   return sorted(list(musim_set), reverse=True)
 
 
-# -------------------- LOAD SETTINGS & DB --------------------
+# Load Musim Aktif
 musim_aktif = get_setting("musim_aktif", "APRIL 2027 (Musim Gadu)")
 
 # -------------------- SIDEBAR SETTINGS & LOGIN --------------------
 render_logo(st.sidebar, width=130)
 
 st.sidebar.title("POKTAN SUKA MAJU")
-st.sidebar.caption("Aplikasi Kas & Unit Usaha")
+st.sidebar.caption("Aplikasi Kas & Unit Usaha (Google Sheets)")
 
-# Filter Pilih Musim Laporan
 st.sidebar.markdown("---")
 st.sidebar.subheader("🗓️ Pilih Musim Laporan")
 daftar_musim = get_all_musim()
@@ -254,41 +225,41 @@ menu = st.sidebar.radio(
     ],
 )
 
-# -------------------- QUERY DATA BERDASARKAN MUSIM LAPORAN --------------------
-conn = get_db_connection()
-df_pestisida = pd.read_sql_query(
-    "SELECT * FROM pestisida WHERE musim = ?", conn, params=(musim_laporan,)
+# Filter Data Berdasarkan Musim
+df_pestisida = (
+    df_pestisida_all[df_pestisida_all["musim"] == musim_laporan]
+    if not df_pestisida_all.empty and "musim" in df_pestisida_all.columns
+    else pd.DataFrame(columns=cols_pestisida)
 )
-df_kredit = pd.read_sql_query(
-    "SELECT * FROM kredit WHERE musim = ?", conn, params=(musim_laporan,)
+df_kredit = (
+    df_kredit_all[df_kredit_all["musim"] == musim_laporan]
+    if not df_kredit_all.empty and "musim" in df_kredit_all.columns
+    else pd.DataFrame(columns=cols_kredit)
 )
-df_transaksi = pd.read_sql_query(
-    "SELECT * FROM transaksi WHERE musim = ?", conn, params=(musim_laporan,)
+df_transaksi = (
+    df_transaksi_all[df_transaksi_all["musim"] == musim_laporan]
+    if not df_transaksi_all.empty and "musim" in df_transaksi_all.columns
+    else pd.DataFrame(columns=cols_transaksi)
 )
-conn.close()
 
 if not df_kredit.empty:
+  df_kredit["dp"] = pd.to_numeric(df_kredit["dp"], errors="coerce").fillna(0)
+  df_kredit["angsuran_masuk"] = pd.to_numeric(
+      df_kredit["angsuran_masuk"], errors="coerce"
+  ).fillna(0)
+  df_kredit["harga_total"] = pd.to_numeric(
+      df_kredit["harga_total"], errors="coerce"
+  ).fillna(0)
   df_kredit["TOTAL_TERBAYAR"] = df_kredit["dp"] + df_kredit["angsuran_masuk"]
   df_kredit["SISA_PIUTANG"] = (
       df_kredit["harga_total"] - df_kredit["TOTAL_TERBAYAR"]
   )
-else:
-  df_kredit = pd.DataFrame(columns=[
-      "id",
-      "musim",
-      "no",
-      "nama_anggota",
-      "nama_barang",
-      "harga_total",
-      "dp",
-      "angsuran_masuk",
-      "status",
-      "TOTAL_TERBAYAR",
-      "SISA_PIUTANG",
-  ])
 
-# HITUNG TOTAL PEMASUKAN & PENGELUARAN PER MUSIM
+# Hitung Rekap Pemasukan & Pengeluaran
 if not df_transaksi.empty:
+  df_transaksi["jumlah"] = pd.to_numeric(
+      df_transaksi["jumlah"], errors="coerce"
+  ).fillna(0)
   df_pem_baru = df_transaksi[df_transaksi["jenis"] == "Pemasukan"]
   tot_combine = df_pem_baru[df_pem_baru["kategori"] == "Combine"][
       "jumlah"
@@ -323,7 +294,11 @@ else:
   ) = pemasukan_tambahan = tot_pengeluaran = 0
 
 tot_pestisida_db = (
-    df_pestisida["jumlah_tagihan"].sum() if not df_pestisida.empty else 0
+    pd.to_numeric(df_pestisida["jumlah_tagihan"], errors="coerce")
+    .fillna(0)
+    .sum()
+    if not df_pestisida.empty
+    else 0
 )
 tot_pestisida = tot_pestisida_db + tot_pestisida_trans
 
@@ -335,7 +310,6 @@ tot_pemasukan_usaha = (
     + tot_kredit_masuk
     + pemasukan_tambahan
 )
-
 saldo_akhir_kas = (saldo_musim_lalu + tot_pemasukan_usaha) - tot_pengeluaran
 
 tot_nilai_kredit = (
@@ -369,7 +343,6 @@ if menu == "📊 Dasbor Utama":
   st.markdown("---")
 
   col_chart1, col_chart2 = st.columns(2)
-
   with col_chart1:
     st.subheader("📈 Pemasukan Per Unit Usaha")
     df_pemasukan = pd.DataFrame({
@@ -441,12 +414,6 @@ if menu == "📊 Dasbor Utama":
       ],
   })
   st.dataframe(df_rekap_show, use_container_width=True)
-  st.download_button(
-      "📥 Unduh Ringkasan Kas (CSV)",
-      df_rekap_show.to_csv(index=False),
-      f"Ringkasan_Kas_{musim_laporan}.csv",
-      "text/csv",
-  )
 
 # -------------------- UNIT COMBINE --------------------
 elif menu == "🚜 Unit Combine (Panen)":
@@ -503,23 +470,7 @@ elif menu == "🧪 Unit Pestisida & Kios":
   st.markdown("---")
 
   if not df_pestisida.empty:
-    col_p_s1, col_p_s2 = st.columns([2, 1])
-    with col_p_s1:
-      cari_pestisida = st.text_input("🔍 Cari Nama Anggota:")
-    with col_p_s2:
-      filter_pestisida_status = st.selectbox(
-          "Status Tagihan:", ["Semua Status", "Belum Lunas", "Lunas"]
-      )
-
-    df_p_show = df_pestisida.copy()
-    if cari_pestisida:
-      df_p_show = df_p_show[
-          df_p_show["nama"].str.contains(cari_pestisida, case=False, na=False)
-      ]
-    if filter_pestisida_status != "Semua Status":
-      df_p_show = df_p_show[df_p_show["status"] == filter_pestisida_status]
-
-    st.dataframe(df_p_show, use_container_width=True)
+    st.dataframe(df_pestisida, use_container_width=True)
 
   df_pst_baru = df_transaksi[
       (df_transaksi["kategori"] == "Pestisida")
@@ -546,18 +497,23 @@ elif menu == "🧪 Unit Pestisida & Kios":
       btn_p = st.form_submit_button("Simpan Tagihan Pestisida")
 
       if btn_p and nama_p:
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute("SELECT MAX(no) FROM pestisida WHERE musim = ?", (musim_aktif,))
-        max_no = c.fetchone()[0]
-        next_no = (max_no or 0) + 1
-        c.execute(
-            "INSERT INTO pestisida (musim, no, nama, jumlah_tagihan, status)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (musim_aktif, next_no, nama_p, tagihan_p, status_p),
+        next_id = (
+            int(df_pestisida_all["id"].max()) + 1
+            if not df_pestisida_all.empty and "id" in df_pestisida_all.columns
+            else 1
         )
-        conn.commit()
-        conn.close()
+        new_row = pd.DataFrame([{
+            "id": next_id,
+            "musim": musim_aktif,
+            "no": next_id,
+            "nama": nama_p,
+            "jumlah_tagihan": tagihan_p,
+            "status": status_p,
+        }])
+        df_pestisida_all = pd.concat(
+            [df_pestisida_all, new_row], ignore_index=True
+        )
+        save_sheet_data("pestisida", df_pestisida_all)
         st.success(f"Berhasil menambahkan tagihan pestisida **{nama_p}**!")
         st.rerun()
 
@@ -607,20 +563,25 @@ elif menu == "💳 Kredit & Cicilan Barang":
       btn_k = st.form_submit_button("Simpan Data Kredit")
 
       if btn_k and nama_k and barang_k:
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute("SELECT MAX(no) FROM kredit WHERE musim = ?", (musim_aktif,))
-        max_no = c.fetchone()[0]
-        next_no = (max_no or 0) + 1
-        st_k = "Lunas" if dp_k >= harga_k else "Berjalan"
-        c.execute(
-            "INSERT INTO kredit (musim, no, nama_anggota, nama_barang,"
-            " harga_total, dp, angsuran_masuk, status) VALUES (?, ?, ?, ?, ?,"
-            " ?, 0, ?)",
-            (musim_aktif, next_no, nama_k, barang_k, harga_k, dp_k, st_k),
+        next_id = (
+            int(df_kredit_all["id"].max()) + 1
+            if not df_kredit_all.empty and "id" in df_kredit_all.columns
+            else 1
         )
-        conn.commit()
-        conn.close()
+        st_k = "Lunas" if dp_k >= harga_k else "Berjalan"
+        new_row = pd.DataFrame([{
+            "id": next_id,
+            "musim": musim_aktif,
+            "no": next_id,
+            "nama_anggota": nama_k,
+            "nama_barang": barang_k,
+            "harga_total": harga_k,
+            "dp": dp_k,
+            "angsuran_masuk": 0,
+            "status": st_k,
+        }])
+        df_kredit_all = pd.concat([df_kredit_all, new_row], ignore_index=True)
+        save_sheet_data("kredit", df_kredit_all)
         st.success(
             f"Berhasil menambahkan data kredit **{nama_k}** ({barang_k})!"
         )
@@ -657,7 +618,7 @@ elif menu == "💸 Rincian Pengeluaran":
         f" **{musim_laporan}**."
     )
 
-# -------------------- TAMBAH TRANSAKSI & HAPUS TRANSAKSI --------------------
+# -------------------- TAMBAH TRANSAKSI --------------------
 elif menu == "➕ Tambah Transaksi":
   st.title("📝 Input Transaksi Kas Baru")
   st.caption(
@@ -691,40 +652,40 @@ elif menu == "➕ Tambah Transaksi":
 
       submitted = st.form_submit_button("Simpan Transaksi")
       if submitted and keterangan:
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO transaksi (musim, tanggal, jenis, kategori, keterangan,"
-            " jumlah) VALUES (?, date('now'), ?, ?, ?, ?)",
-            (musim_aktif, jenis, kategori, keterangan, jumlah_rp),
+        next_id = (
+            int(df_transaksi_all["id"].max()) + 1
+            if not df_transaksi_all.empty and "id" in df_transaksi_all.columns
+            else 1
         )
-        conn.commit()
-        conn.close()
+        new_row = pd.DataFrame([{
+            "id": next_id,
+            "musim": musim_aktif,
+            "tanggal": str(pd.Timestamp.now().strftime("%Y-%m-%d")),
+            "jenis": jenis,
+            "kategori": kategori,
+            "keterangan": keterangan,
+            "jumlah": jumlah_rp,
+        }])
+        df_transaksi_all = pd.concat(
+            [df_transaksi_all, new_row], ignore_index=True
+        )
+        save_sheet_data("transaksi", df_transaksi_all)
         st.success(
             f"Berhasil menyimpan {jenis}: **{keterangan}** sebesar **Rp"
             f" {jumlah_rp:,.0f}**!"
         )
         st.rerun()
 
+    # Form Hapus Transaksi
     st.markdown("---")
     st.subheader("🗑️ Hapus / Kelola Transaksi Manual")
-
-    conn = get_db_connection()
-    df_all_trans = pd.read_sql_query(
-        "SELECT id, tanggal, jenis, kategori, keterangan, jumlah FROM"
-        " transaksi WHERE musim = ?",
-        conn,
-        params=(musim_aktif,),
-    )
-    conn.close()
-
-    if not df_all_trans.empty:
-      st.dataframe(df_all_trans, use_container_width=True)
+    if not df_transaksi.empty:
+      st.dataframe(df_transaksi, use_container_width=True)
       with st.form("form_hapus_transaksi"):
         options_trans = [
             f"ID: {row['id']} | {row['jenis']} - {row['kategori']} -"
             f" {row['keterangan']} (Rp {row['jumlah']:,.0f})"
-            for _, row in df_all_trans.iterrows()
+            for _, row in df_transaksi.iterrows()
         ]
         trans_to_delete = st.selectbox(
             "Pilih Transaksi yang Mau Dihapus:", options_trans
@@ -735,11 +696,10 @@ elif menu == "➕ Tambah Transaksi":
           selected_id = int(
               trans_to_delete.split("|")[0].replace("ID:", "").strip()
           )
-          conn = get_db_connection()
-          c = conn.cursor()
-          c.execute("DELETE FROM transaksi WHERE id = ?", (selected_id,))
-          conn.commit()
-          conn.close()
+          df_transaksi_all = df_transaksi_all[
+              df_transaksi_all["id"] != selected_id
+          ]
+          save_sheet_data("transaksi", df_transaksi_all)
           st.success(f"Berhasil menghapus transaksi ID {selected_id}!")
           st.rerun()
     else:
@@ -755,12 +715,6 @@ elif menu == "🔴 Tutup Buku & Reset Musim":
         " samping kiri terlebih dahulu."
     )
   else:
-    st.error(
-        "⚠️ **Perhatian Pengurus:** Fitur ini akan menutup pembukuan musim"
-        " aktif saat ini dan memindahkan Saldo Akhir Kas sebagai Saldo Awal"
-        " Musim Baru."
-    )
-
     col_t1, col_t2 = st.columns(2)
     with col_t1:
       st.metric("Musim Aktif Saat Ini", musim_aktif)
@@ -779,7 +733,6 @@ elif menu == "🔴 Tutup Buku & Reset Musim":
       if konfirmasi_tutup and nama_musim_baru:
         set_saldo_awal_musim(nama_musim_baru, saldo_final_alihkan)
         set_setting("musim_aktif", nama_musim_baru)
-
         st.balloons()
         st.success(
             f"✅ Berhasil Tutup Buku! Musim baru **'{nama_musim_baru}'** telah"
