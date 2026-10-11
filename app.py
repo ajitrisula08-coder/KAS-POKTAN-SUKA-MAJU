@@ -343,10 +343,8 @@ tot_nilai_kredit = (
 )
 tot_kredit_terbayar = (
     df_kredit["TOTAL_TERBAYAR"].sum() if not df_kredit.empty else 0
-)
-tot_sisa_piutang = (
-    df_kredit["SISA_PIUTANG"].sum() if not df_kredit.empty else 0
-)
+) + tot_kredit_masuk
+tot_sisa_piutang = max(0.0, tot_nilai_kredit - tot_kredit_terbayar)
 
 # -------------------- DASHBOARD UTAMA --------------------
 if menu == "📊 Dasbor Utama":
